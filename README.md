@@ -1,218 +1,190 @@
 # QuotaPuter
 
-LLM Subscription Quota Viewer for M5Stack Cardputer
+LLM quota / usage viewer for the **M5Stack Cardputer** (ESP32-S3).
 
-A pixel-art style firmware to view subscription quotas and API usage from various LLM platforms.
+A pixel-art firmware that shows your subscription quota, API usage, or account
+balance across several official LLM platforms — built with pure **ESP-IDF**
+(no Arduino).
 
-![Version](https://img.shields.io/badge/version-v1.0.0-blue)
+![Version](https://img.shields.io/badge/version-v0.1.0-blue)
 ![Platform](https://img.shields.io/badge/platform-ESP32--S3-green)
 ![Framework](https://img.shields.io/badge/framework-ESP--IDF-orange)
 
-## Features
+## What QuotaPuter can and cannot do
 
-- 📊 View quota/usage for multiple LLM providers
-- 🎨 Pixel-art UI design
-- 🔐 Secure credential storage
-- 📡 Wi-Fi connectivity
-- 💾 Offline caching
-- ⚡ Auto-refresh
+**Can:**
 
-## Supported Providers
+- ✅ Show MiniMax Token Plan remaining quota (China **and** International, as two
+  separate providers)
+- ✅ Show Kimi (Moonshot) API balance — available / cash / voucher
+- ✅ Show OpenAI / Anthropic / Google-Gemini **org/API usage** via a relay you run
+- ✅ Cache the last good result and show it offline, marked `STALE`
+- ✅ Auto-refresh (1 / 5 / 15 / 30 min) and manual refresh
 
-| Provider | Region | Auth Mode | Notes |
-|----------|--------|-----------|-------|
-| MiniMax | CN | Direct | Token Plan subscription |
-| MiniMax | Global | Direct | Token Plan subscription |
-| OpenAI | - | Relay (recommended) | API usage, NOT ChatGPT plan |
-| Anthropic | - | Relay (required) | Org usage, NOT Claude Pro |
-| Gemini | - | Relay (required) | Cloud project, NOT AI Pro |
-| Kimi | - | Direct | API balance |
+**Cannot:**
 
-## What QuotaPuter CAN Do
+- ❌ Call LLMs or generate anything
+- ❌ Read a personal **ChatGPT Plus**, **Claude Pro/Max**, or **Google AI** plan —
+  those have no official public quota API
+- ❌ Use unofficial APIs, web-login cookies, or scraping
+- ❌ Store admin keys on the device for OpenAI/Anthropic/Gemini (use relay mode)
 
-✅ View MiniMax Token Plan remaining quota
-✅ View Kimi API balance
-✅ View OpenAI API usage (via relay)
-✅ View Anthropic organization usage (via relay)
-✅ View Google Cloud/Gemini quotas (via relay)
-✅ Cache results for offline viewing
-✅ Auto-refresh every 5 minutes (configurable)
+QuotaPuter only calls official, publicly documented endpoints.
 
-## What QuotaPuter CANNOT Do
+## Supported providers
 
-❌ Call LLM APIs or generate responses
-❌ Access ChatGPT Plus subscription
-❌ Access Claude Pro/Max personal plans
-❌ Access Google AI Pro subscription
-❌ Use unofficial or reverse-engineered APIs
-❌ Store admin keys directly (use relay mode)
+| Provider | Region / type | Shows | Auth |
+| --- | --- | --- | --- |
+| MiniMax | CN (Token Plan) | remaining %, used/total, reset window | Subscription Key (direct) |
+| MiniMax | Global (Token Plan) | remaining %, used/total, reset window | Subscription Key (direct) |
+| Kimi | API balance | available / cash / voucher (CNY) | API Key (direct) |
+| OpenAI | API org usage | tokens / cost | Admin key via **relay** |
+| Anthropic | Console org usage | usage / cost | Admin key via **relay** |
+| Gemini | Google Cloud project | project usage / quota | service account via **relay** |
+
+The OpenAI/Anthropic/Gemini screens are labelled `API USAGE - NOT CHATGPT PLAN`,
+`ORG USAGE - NOT CLAUDE PRO/MAX`, and `CLOUD PROJECT - NOT GOOGLE AI PLAN`.
+
+### MiniMax CN vs MiniMax Global
+
+MiniMax is shown as **two independent providers** with separate credentials and
+region badges:
+
+| Provider id | Badge | API host |
+| --- | --- | --- |
+| `minimax_cn` | `CN` | `www.minimaxi.com` |
+| `minimax_global` | `GL` | `www.minimax.io` |
+
+They do not share keys; configure each separately.
 
 ## Hardware
 
-- **Device**: M5Stack Cardputer (ESP32-S3)
-- **Display**: ILI9342C 320x240
-- **Keyboard**: Built-in matrix keyboard
-- **Storage**: MicroSD slot (optional)
+- **Device:** M5Stack Cardputer (ESP32-S3, 8 MB flash, no PSRAM)
+- **Display:** ST7789V2, 240×135 landscape
+- **Keyboard:** built-in 74HC138 matrix (56 keys), driven directly in ESP-IDF
+- **Connectivity:** Wi-Fi (2.4 GHz), USB-Serial-JTAG for provisioning
 
-## Quick Start
-
-### Build
+## Build & flash
 
 ```bash
-# Activate ESP-IDF
 . $IDF_PATH/export.sh
-
-# Set target
 idf.py set-target esp32s3
-
-# Build
 idf.py build
-```
-
-### Flash
-
-```bash
 idf.py -p /dev/tty.usbmodemXXXX flash monitor
 ```
 
-### Configure Wi-Fi
+The first build downloads the official `m5stack/m5unified` component (which pulls
+`m5stack/m5gfx`) from the ESP Component Registry.
 
-1. On first boot, device enters Wi-Fi config mode
-2. Type SSID and password
-3. Press ENTER to connect
+## Configure Wi-Fi & credentials
 
-### Add Providers
+Set Wi-Fi on the device (press **W**) or over USB; add provider credentials over
+USB with the bundled tool. Full walkthrough: **[docs/PROVISIONING.md](docs/PROVISIONING.md)**.
 
 ```bash
-# Using USB tool
+python tools/quota_config.py --port /dev/tty.usbmodemXXXX set-wifi
 python tools/quota_config.py --port /dev/tty.usbmodemXXXX add-provider minimax_cn
-python tools/quota_config.py --port /dev/tty.usbmodemXXXX add-provider kimi --key sk-xxxx
+python tools/quota_config.py --port /dev/tty.usbmodemXXXX add-provider openai \
+    --relay-url https://your-relay.example.com/openai
+python tools/quota_config.py --port /dev/tty.usbmodemXXXX list
 ```
 
-## User Guide
+Keys are read without echo, sent to the device only, and never written to disk.
+After writing a key the device runs a read-only test query and reports
+`CONNECTED` or the error.
 
-### Controls
+### Which providers should use a relay?
+
+| Provider | Recommendation |
+| --- | --- |
+| MiniMax CN / Global, Kimi | Direct is fine (low-privilege user keys) |
+| OpenAI, Anthropic | **Relay strongly recommended** (admin keys) |
+| Gemini / Google Cloud | **Relay required** (service-account credentials) |
+
+A relay is a small service you host that holds the high-privilege credentials and
+returns a standardized JSON record; the device stores only the relay URL and a
+read-only token. See [docs/PROVISIONING.md](docs/PROVISIONING.md) for the format.
+
+## Controls (PRD §9)
+
+The Cardputer has no dedicated arrow keys, so punctuation keys act as arrows.
 
 | Key | Action |
-|-----|--------|
-| ← → | Navigate providers |
-| ENTER | Open provider detail |
-| ESC | Back/Cancel |
-| R | Refresh current |
-| S | Settings |
-| W | Wi-Fi config |
+| --- | --- |
+| `,` / `/` | Previous / next provider |
+| `;` / `.` | Up / down (menus) |
+| `Enter` | Open detail / select |
+| `Backspace` | Back / cancel |
+| `R` | Refresh current provider |
+| `S` | Settings |
+| `W` | Wi-Fi setup |
+| `D` (hold) | Delete the current provider's credentials |
+| `Fn`+`Del` (hold) | Wipe all credentials and Wi-Fi |
 
-### Provider Cards
+### Status colours
 
-Each card shows:
-- Provider logo (pixel art)
-- Provider name and region
-- Main metric (percentage/balance)
-- Progress bar
-- Last updated time
-
-### Status Colors
-
-| Color | Meaning |
-|-------|---------|
+| Colour / tag | Meaning |
+| --- | --- |
 | 🟢 Green | OK (<80% used) |
-| 🟡 Yellow | Warning (80-95% used) |
-| 🔴 Red | Critical (>95% used) |
-| ⚪ Gray | Stale (cached) / Setup required |
+| 🟡 Yellow | Warning (≥80% used / low balance) |
+| 🔴 Red `ERR` | Critical (≥95% used) or request failure |
+| ⚪ Gray `STALE` | Showing cached data |
+| ⚪ Gray `SETUP` | Not configured |
 
-## Security
+## Delete credentials / factory reset
 
-### Authorization Modes
+- One provider: `quota_config.py remove-provider <id>`, or hold **D** on the
+  overview.
+- Everything (all secrets + Wi-Fi): `quota_config.py factory-reset`, or hold
+  **Fn+Del** on the device.
 
-**Direct Mode** (credentials on device):
-- MiniMax CN/Global
-- Kimi
+## Privacy & security
 
-**Relay Mode** (recommended for admin keys):
-- OpenAI
-- Anthropic
-- Gemini
+- This repository, the firmware image, and the example configs contain **no**
+  real keys, tokens, cookies, accounts, or passwords.
+- QuotaPuter does **not** collect, upload, or embed any user credentials. Keys
+  live only on your device (and, for relay mode, on your own relay server).
+- Secrets are never printed in full on screen or in logs.
+- All requests are HTTPS with certificate validation.
 
-### Relay Server
+Details: **[docs/SECURITY.md](docs/SECURITY.md)**.
 
-For high-privilege credentials, deploy your own relay server:
-
-```bash
-# Your relay returns standardized JSON
-{
-  "provider": "openai",
-  "used": 12.30,
-  "unit": "USD",
-  "percentage": 45.5,
-  "status": "ok"
-}
-```
-
-## Development
-
-### Project Structure
+## Project structure
 
 ```
 QuotaPuter/
-├── main/                    # Main application
-│   └── main.c
+├── main/                      # app entry, UI state machine, refresh scheduler
+│   ├── main.cpp app.cpp refresh.cpp
 ├── components/
-│   ├── display/            # Pixel UI
-│   ├── keyboard/           # Input handling
-│   ├── wifi_manager/       # Wi-Fi
-│   ├── http_client/        # HTTPS requests
-│   ├── secret_store/       # Encrypted NVS
-│   ├── cache/              # Offline cache
-│   ├── provider_core/      # Provider interface
-│   ├── providers/          # Provider implementations
-│   └── provisioner/        # USB config protocol
-├── tools/
-│   └── quota_config.py     # PC configuration tool
-├── config/
-│   └── providers.example.json
-└── docs/
-    ├── PROVISIONING.md
-    └── SECURITY.md
+│   ├── provider_core/         # quota_result_t / provider vtable / registry
+│   ├── secret_store/          # credential + Wi-Fi NVS storage
+│   ├── cache/                 # offline result cache
+│   ├── http_client/           # HTTPS GET + cert bundle
+│   ├── wifi_manager/          # STA connect + reconnect
+│   ├── providers/             # minimax / kimi / relay (openai,anthropic,gemini)
+│   ├── provisioner/           # USB-Serial-JTAG config protocol
+│   ├── keyboard/              # 74HC138 matrix scan
+│   ├── display/               # pixel UI primitives (M5GFX)
+│   └── assets/                # provider glyph styles
+├── tools/quota_config.py      # PC provisioning tool
+├── config/                    # *.example.json templates (no secrets)
+└── docs/                      # PRD, PROVISIONING, SECURITY
 ```
-
-### Build with ESP-IDF
-
-```bash
-# Full rebuild
-rm -rf build
-idf.py build
-
-# Flash and monitor
-idf.py -p /dev/tty.usbmodemXXXX flash monitor
-```
-
-## Documentation
-
-- [Provisioning Guide](docs/PROVISIONING.md)
-- [Security Guide](docs/SECURITY.md)
-- [PRD](docs/PRD.md)
 
 ## License
 
-MIT License - see LICENSE file
+MIT — see [LICENSE](LICENSE).
 
 ## Trademarks
 
-All brand names, logos, and trademarks belong to their respective owners:
-- MiniMax™ - MiniMax Co., Ltd.
-- OpenAI™ - OpenAI, Inc.
-- Anthropic™ - Anthropic PBC
-- Google Gemini™ - Google LLC
-- Kimi™ - Moonshot AI
-
-QuotaPuter is not affiliated with any of these companies.
+All brand names and logos are the property of their respective owners (MiniMax,
+OpenAI, Anthropic, Google Gemini, Moonshot/Kimi). The pixel glyphs in this
+project are used only to identify the corresponding official service and do not
+imply sponsorship, endorsement, or affiliation. QuotaPuter is not affiliated with
+any of these companies.
 
 ## Disclaimer
 
-Users are responsible for:
-- Securing their own API keys
-- Monitoring API usage and costs
-- Ensuring compliance with provider terms of service
-- Device physical security
-
-This firmware only reads publicly documented API endpoints. No warranty is provided.
+You are responsible for your own API keys, their permissions, your usage/costs,
+and the physical security of the device. This firmware reads only publicly
+documented endpoints and is provided without warranty.

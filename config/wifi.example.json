@@ -1,0 +1,5 @@
+{
+  "_comment": "Reference template only. Set Wi-Fi over USB with `quota_config.py set-wifi` or on the device (press W). The real config/wifi.json is gitignored and never committed.",
+  "ssid": "YourNetworkName",
+  "password": "your-wifi-password"
+}

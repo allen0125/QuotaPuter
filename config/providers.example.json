@@ -1,0 +1,41 @@
+{
+  "_comment": "Reference template only. QuotaPuter is provisioned over USB with tools/quota_config.py; this file documents the per-provider fields and is never read by the firmware. Do NOT put real keys here. The real config/providers.json is gitignored.",
+  "providers": [
+    {
+      "id": "minimax_cn",
+      "enabled": false,
+      "auth_mode": "direct",
+      "secret_source": "provisioned_on_device"
+    },
+    {
+      "id": "minimax_global",
+      "enabled": false,
+      "auth_mode": "direct",
+      "secret_source": "provisioned_on_device"
+    },
+    {
+      "id": "kimi",
+      "enabled": false,
+      "auth_mode": "direct",
+      "secret_source": "provisioned_on_device"
+    },
+    {
+      "id": "openai",
+      "enabled": false,
+      "auth_mode": "relay",
+      "relay_url": "https://your-relay.example.com/openai"
+    },
+    {
+      "id": "anthropic",
+      "enabled": false,
+      "auth_mode": "relay",
+      "relay_url": "https://your-relay.example.com/anthropic"
+    },
+    {
+      "id": "gemini",
+      "enabled": false,
+      "auth_mode": "relay",
+      "relay_url": "https://your-relay.example.com/gemini"
+    }
+  ]
+}
