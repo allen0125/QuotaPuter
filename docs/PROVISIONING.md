@@ -63,6 +63,10 @@ Run your own relay that holds those credentials, talks to the official org/usage
 APIs, and returns the standardized record below. The device stores only the
 relay URL and a read-only device token.
 
+> A ready-to-deploy reference relay (Cloudflare Worker) for Anthropic/OpenAI is in
+> [`examples/relay-cloudflare/`](../examples/relay-cloudflare/) — it gives you a
+> trusted-HTTPS URL and keeps the admin keys as Worker secrets.
+
 ```bash
 python tools/quota_config.py --port /dev/tty.usbmodemXXXX add-provider openai \
     --relay-url https://your-relay.example.com/openai
