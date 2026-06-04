@@ -54,56 +54,68 @@ static void parse_token_plan(const char *body, quota_result_t *r) {
         return;
     }
 
-    double total = NAN, remain = NAN, usage_pct = NAN, end_time = NAN;
     cJSON *mr = cJSON_GetObjectItemCaseSensitive(root, "model_remains");
-    if (cJSON_IsArray(mr) && cJSON_GetArraySize(mr) > 0) {
-        // Choose the entry with the largest 'total' (the main plan), else the first.
-        cJSON *best = NULL, *it = NULL;
-        double best_total = -1.0;
-        cJSON_ArrayForEach(it, mr) {
-            double t;
-            if (provider_json_get_number(it, "total", &t) && t > best_total) {
-                best_total = t;
-                best = it;
-            }
-        }
-        cJSON *ent = best != NULL ? best : cJSON_GetArrayItem(mr, 0);
-        double v;
-        if (provider_json_get_number(ent, "total", &v)) total = v;
-        if (provider_json_get_number(ent, "remain", &v)) remain = v;
-        else if (provider_json_get_number(ent, "remains", &v)) remain = v;
-        if (provider_json_get_number(ent, "usage_percent", &v)) usage_pct = v;
-        if (provider_json_get_number(ent, "end_time", &v)) end_time = v;
-    }
-    if (isnan(total) && isnan(remain) && isnan(usage_pct)) {
-        // Fall back to a couple of plausible top-level field names.
-        double v;
-        if (provider_json_get_number(root, "total_quota", &v)) total = v;
-        if (provider_json_get_number(root, "remain_quota", &v)) remain = v;
-    }
-    if (isnan(total) && isnan(remain) && isnan(usage_pct)) {
+    if (!cJSON_IsArray(mr) || cJSON_GetArraySize(mr) == 0) {
         r->status = QUOTA_STATUS_API_CHANGED;
         cJSON_Delete(root);
         return;
     }
-
-    if (!isnan(total) && total > 0 && !isnan(remain)) {
-        r->limit = (float)total;
-        r->remaining = (float)remain;
-        r->used = (float)(total - remain);
-        r->has_limit = true;
-        r->percentage = (float)((total - remain) / total * 100.0);
-    } else if (!isnan(usage_pct)) {
-        // Observed: usage_percent is the REMAINING fraction, so used% = 100 - it.
-        double used_pct = 100.0 - usage_pct;
-        if (used_pct < 0) used_pct = 0;
-        if (used_pct > 100) used_pct = 100;
-        r->percentage = (float)used_pct;
-        if (!isnan(remain)) r->remaining = (float)remain;
+    // Prefer the "general" (text) model entry, else the first one.
+    cJSON *ent = NULL, *it = NULL;
+    cJSON_ArrayForEach(it, mr) {
+        const char *name = provider_json_get_string(it, "model_name");
+        if (name != NULL && strcmp(name, "general") == 0) {
+            ent = it;
+            break;
+        }
     }
-    strncpy(r->unit, "tokens", sizeof(r->unit) - 1);
-    if (!isnan(end_time) && end_time > 0) {
-        r->reset_at = (int64_t)end_time;
+    if (ent == NULL) ent = cJSON_GetArrayItem(mr, 0);
+
+    // Token Plan reports a remaining-percent per window: a short "interval" cap
+    // and a "weekly" cap. The headline is the binding (smaller) one.
+    double interval_rem = NAN, weekly_rem = NAN, end_time = NAN, weekly_end = NAN;
+    provider_json_get_number(ent, "current_interval_remaining_percent", &interval_rem);
+    provider_json_get_number(ent, "current_weekly_remaining_percent", &weekly_rem);
+    if (isnan(interval_rem) && isnan(weekly_rem)) {
+        r->status = QUOTA_STATUS_API_CHANGED;
+        cJSON_Delete(root);
+        return;
+    }
+    double remaining;
+    bool weekly_binds;
+    if (!isnan(interval_rem) && !isnan(weekly_rem)) {
+        weekly_binds = weekly_rem <= interval_rem;
+        remaining = weekly_binds ? weekly_rem : interval_rem;
+    } else if (!isnan(weekly_rem)) {
+        remaining = weekly_rem;
+        weekly_binds = true;
+    } else {
+        remaining = interval_rem;
+        weekly_binds = false;
+    }
+    double used_pct = 100.0 - remaining;
+    if (used_pct < 0) used_pct = 0;
+    if (used_pct > 100) used_pct = 100;
+    r->percentage = (float)used_pct;
+    r->has_limit = false;
+    r->unit[0] = '\0';  // percent-based plan, no unit
+
+    // Surface both windows on the detail page.
+    if (!isnan(interval_rem)) {
+        r->aux1 = (float)interval_rem;
+        strncpy(r->aux1_label, "INTERVAL%", sizeof(r->aux1_label) - 1);
+    }
+    if (!isnan(weekly_rem)) {
+        r->aux2 = (float)weekly_rem;
+        strncpy(r->aux2_label, "WEEKLY%", sizeof(r->aux2_label) - 1);
+    }
+
+    // Reset window of the binding cap (timestamps are unix milliseconds).
+    provider_json_get_number(ent, "end_time", &end_time);
+    provider_json_get_number(ent, "weekly_end_time", &weekly_end);
+    double reset_ms = weekly_binds ? weekly_end : end_time;
+    if (!isnan(reset_ms) && reset_ms > 0) {
+        r->reset_at = (int64_t)(reset_ms / 1000.0);
     }
     r->updated_at = provider_now_unix();
     r->status = QUOTA_STATUS_OK;
@@ -125,7 +137,7 @@ static esp_err_t minimax_fetch(const char *id, const char *display, const char *
 
     char url[160];
     snprintf(url, sizeof(url), "https://%s/v1/token_plan/remains", host);
-    char body[2048];
+    char body[4096];
     http_get_resp_t resp = {.body = body, .body_cap = sizeof(body)};
     http_get_req_t req = {.url = url, .bearer_token = s.secret, .accept = "application/json"};
     int http_status = QUOTA_STATUS_SERVICE_ERROR;

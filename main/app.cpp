@@ -205,17 +205,16 @@ void render_detail() {
             y += 12;
         }
     }
-    if (is_balance(e)) {
-        if (!std::isnan(e.result.aux1)) {
-            snprintf(buf, sizeof(buf), "%s: %.2f", e.result.aux1_label, e.result.aux1);
-            ui::text(8, y, buf, ui::WHITE, ui::BLACK, 1);
-            y += 12;
-        }
-        if (!std::isnan(e.result.aux2)) {
-            snprintf(buf, sizeof(buf), "%s: %.2f", e.result.aux2_label, e.result.aux2);
-            ui::text(8, y, buf, ui::WHITE, ui::BLACK, 1);
-            y += 12;
-        }
+    // Secondary metrics: Kimi cash/voucher, MiniMax interval/weekly remaining %.
+    if (!std::isnan(e.result.aux1) && e.result.aux1_label[0] != '\0') {
+        snprintf(buf, sizeof(buf), "%s: %.2f", e.result.aux1_label, e.result.aux1);
+        ui::text(8, y, buf, ui::WHITE, ui::BLACK, 1);
+        y += 12;
+    }
+    if (!std::isnan(e.result.aux2) && e.result.aux2_label[0] != '\0') {
+        snprintf(buf, sizeof(buf), "%s: %.2f", e.result.aux2_label, e.result.aux2);
+        ui::text(8, y, buf, ui::WHITE, ui::BLACK, 1);
+        y += 12;
     }
     if (e.result.reset_at > 0) {
         int64_t d = e.result.reset_at - (int64_t)time(NULL);
