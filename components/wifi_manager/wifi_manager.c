@@ -5,6 +5,7 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
+#include "esp_sntp.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
@@ -89,6 +90,12 @@ esp_err_t wifi_manager_init(void) {
 
     const esp_timer_create_args_t targs = {.callback = reconnect_cb, .name = "wifi_reconnect"};
     ESP_ERROR_CHECK(esp_timer_create(&targs, &s_reconnect_timer));
+
+    // SNTP makes "last updated" timestamps absolute (and correct across reboots)
+    // once connectivity is available; it polls in the background until then.
+    esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
+    esp_sntp_setservername(0, "pool.ntp.org");
+    esp_sntp_init();
 
     s_inited = true;
     s_state = WIFI_STATE_IDLE;

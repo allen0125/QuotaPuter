@@ -240,7 +240,7 @@ void render_detail() {
     char ago[24];
     fmt_ago(e.result.updated_at, ago, sizeof(ago));
     ui::text(8, 118, ago, ui::DIM, ui::BLACK, 1);
-    ui::text(150, 118, "R refresh  BKSP back", ui::DIM, ui::BLACK, 1);
+    ui::text(132, 118, "R refr  BKSP back", ui::DIM, ui::BLACK, 1);
 }
 
 void render_settings() {
@@ -260,7 +260,7 @@ void render_settings() {
         }
         ui::text(8, y, line, fg, bg, 1);
     }
-    ui::text_center(118, ";/. move  ENTER select  ,// change  BKSP back", ui::DIM, ui::BLACK, 1);
+    ui::text_center(118, ";/. nav  ENTER sel  ,// rate  BKSP back", ui::DIM, ui::BLACK, 1);
 }
 
 void render_wifi() {
@@ -300,7 +300,7 @@ void render_manage() {
                  configured ? "" : "(setup)");
         ui::text(8, y, line, col, i == st.menu_sel ? ui::DARK : ui::BLACK, 1);
     }
-    ui::text_center(118, "ENTER toggle  D(hold) delete  BKSP back", ui::DIM, ui::BLACK, 1);
+    ui::text_center(118, "ENTER on/off  D=del  BKSP back", ui::DIM, ui::BLACK, 1);
 }
 
 void render_device() {
