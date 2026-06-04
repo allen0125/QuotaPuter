@@ -13,8 +13,9 @@ M5Stack Cardputer (ESP32-S3) 上的 LLM 额度查看固件，纯 **ESP-IDF** 开
 ## 硬件参考 (Cardputer)
 
 **键盘** — 74HC138 3-8 译码器扫描矩阵，**非 I2C**：
-- 行选择 A0/A1/A2 → GPIO 11 / 9 / 8；列输入 Y0–Y6 → GPIO 13 / 15 / 3 / 4 / 5 / 6 / 7（下拉输入）
-- 官方 `m5stack/m5cardputer` 的 `IOMatrixKeyboardReader` 已实现该 74HC138 矩阵扫描 —— 直接使用，**不自行重写**。
+- 行选择 A0/A1/A2 → GPIO 8 / 9 / 11；列输入 Y0–Y6 → GPIO 13 / 15 / 3 / 4 / 5 / 6 / 7（下拉输入）
+- 原理：A0–A2 选行 → 74HC138 对应输出拉低 → 读列检测按键。共 4 行 × 14 列 = 56 键。
+- 官方 Cardputer 键盘驱动仅以 Arduino `M5Cardputer` 库形式提供、**未发布为独立 ESP-IDF Registry 组件**（`m5stack/m5cardputer` 在 Registry 返回 404）。因此键盘按本节文档自实现 74HC138 矩阵扫描（ESP-IDF GPIO），显示等 SPI/I2C 底层仍交给官方 M5Unified/M5GFX。
 
 **显示** — ST7789V2，240×135 横屏，SPI2_HOST：MOSI/SCLK/CS/DC/RST/BL → GPIO 35 / 36 / 37 / 34 / 33 / 38。
 由 M5GFX `autodetect()` 自动配置，`setRotation(1)` 得到 240×135 横屏。
@@ -23,7 +24,7 @@ M5Stack Cardputer (ESP32-S3) 上的 LLM 额度查看固件，纯 **ESP-IDF** 开
 
 ## 架构决策 (Architecture Decisions)
 
-1. **官方组件**：依赖 `m5stack/m5cardputer`（传递依赖 `m5stack/m5unified` → `m5stack/m5gfx`）。纯 ESP-IDF，**不含 Arduino**。显示、键盘、电池全部走官方驱动。
+1. **官方组件**：依赖 `m5stack/m5unified ^0.2.17`（传递依赖 `m5stack/m5gfx`）。纯 ESP-IDF，**不含 Arduino**。显示/电池/SPI 走官方 M5Unified/M5GFX；键盘因官方未发布独立 ESP-IDF 组件，自实现 74HC138 矩阵扫描（见硬件参考）。
 2. **语言分层**：数据/网络/存储/Provider 层用 **C**（`esp_http_client` / `cJSON` / `nvs` 友好，且 PRD §10.2 接口为 C）；UI/输入/应用层用 **C++**（M5Cardputer / M5GFX）。`main.cpp` 内 `extern "C" void app_main` 桥接。
 3. **网络**：HTTPS 仅用 `esp_http_client` + `esp_crt_bundle`（Mozilla 根证书校验，禁止关闭 TLS）；超时 10s；失败重试 ≤1；并发 ≤2 Provider。
 4. **加密 NVS**：应用层使用标准 NVS API；生产部署通过 **Flash Encryption** 透明加密整个 flash（含 NVS）。当 `CONFIG_NVS_ENCRYPTION` 开启时走 `nvs_flash_secure_init`，否则标准 init。细节写入 `docs/SECURITY.md`。

@@ -1,0 +1,64 @@
+// QuotaPuter — firmware entry point.
+//
+// ESP-IDF's startup calls C `app_main`; we bridge into the C++ UI layer
+// (M5Unified / M5GFX) from here. Data/network/storage modules are plain C and
+// are wired in across later phases (see AGENT.md development plan). For now this
+// brings up the display and shows the boot splash so Phase 0 is verifiable on
+// real hardware.
+
+#include <cstdint>
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_log.h"
+#include <M5Unified.h>
+
+#define QUOTAPUTER_VERSION "0.1.0"
+
+namespace {
+constexpr char TAG[] = "quotaputer";
+
+// RGB565 literals (avoid relying on Arduino TFT_* macros under pure ESP-IDF).
+constexpr uint16_t COL_BLACK = 0x0000;
+constexpr uint16_t COL_GREEN = 0x07E0;
+constexpr uint16_t COL_WHITE = 0xFFFF;
+constexpr uint16_t COL_GRAY = 0x8410;
+
+void draw_splash() {
+    auto &lcd = M5.Display;
+    lcd.setRotation(1);  // 240x135 landscape
+    lcd.setColorDepth(16);
+    lcd.fillScreen(COL_BLACK);
+
+    lcd.setTextColor(COL_GREEN, COL_BLACK);
+    lcd.setTextSize(2);
+    lcd.setCursor(28, 44);
+    lcd.print("QUOTAPUTER");
+
+    lcd.setTextSize(1);
+    lcd.setTextColor(COL_WHITE, COL_BLACK);
+    lcd.setCursor(28, 70);
+    lcd.printf("v%s", QUOTAPUTER_VERSION);
+
+    lcd.setTextColor(COL_GRAY, COL_BLACK);
+    lcd.setCursor(28, 86);
+    lcd.print("LLM quota viewer");
+
+    // Simple framed pixel border to set the retro tone.
+    lcd.drawRect(0, 0, lcd.width(), lcd.height(), COL_GREEN);
+}
+}  // namespace
+
+extern "C" void app_main(void) {
+    auto cfg = M5.config();
+    M5.begin(cfg);
+    ESP_LOGI(TAG, "QuotaPuter v%s booting (display %dx%d)", QUOTAPUTER_VERSION,
+             (int)M5.Display.width(), (int)M5.Display.height());
+
+    draw_splash();
+
+    for (;;) {
+        M5.update();
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+}

@@ -1,0 +1,25 @@
+# QuotaPuter default sdkconfig. The generated `sdkconfig` is gitignored;
+# this file is the tracked template (PRD §6.4). Target: M5Stack Cardputer.
+
+CONFIG_IDF_TARGET="esp32s3"
+
+# Cardputer / StampS3 carries ESP32-S3FN8: 8 MB flash, no PSRAM.
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="8MB"
+
+# Custom partition layout: nvs + dedicated encrypted-capable `secret` + factory app.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# Console + provisioning over the Cardputer's native USB-Serial-JTAG port.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# HTTPS: bundled Mozilla root CAs, full list, certificate validation always on.
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
+
+# 1 kHz tick is recommended by M5GFX for smooth UI/refresh timing.
+CONFIG_FREERTOS_HZ=1000
+
+# Roomy main task stack for the C++ UI layer.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192

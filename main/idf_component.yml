@@ -1,0 +1,9 @@
+## Managed component dependencies (ESP Component Registry).
+## M5Unified pulls M5GFX transitively and provides Cardputer display/board init
+## under pure ESP-IDF (no Arduino). The keyboard 74HC138 matrix is implemented
+## locally in components/keyboard (see AGENT.md hardware reference).
+dependencies:
+  idf:
+    version: ">=5.0"
+  m5stack/m5unified:
+    version: "^0.2.17"

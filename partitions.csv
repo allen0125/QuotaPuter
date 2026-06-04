@@ -1,0 +1,9 @@
+# QuotaPuter partition table (8 MB flash).
+# `secret` is a dedicated NVS partition for credentials, kept separate from the
+# general `nvs` partition so it can be wiped on factory-reset and (in production)
+# transparently protected by flash encryption. See docs/SECURITY.md.
+# Name,     Type, SubType,  Offset,  Size,    Flags
+nvs,        data, nvs,      ,        0x6000,
+phy_init,   data, phy,      ,        0x1000,
+secret,     data, nvs,      ,        0x4000,
+factory,    app,  factory,  ,        0x300000,
