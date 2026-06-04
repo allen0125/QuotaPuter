@@ -47,6 +47,17 @@ function json(obj, status = 200) {
   });
 }
 
+// Surface the upstream vendor error so "wrong key" vs "missing permission" is
+// distinguishable on the device/curl. 401/403 -> auth, everything else -> error.
+async function upstreamError(provider, r) {
+  let detail = "";
+  try {
+    detail = (await r.text()).slice(0, 200).replace(/\s+/g, " ").trim();
+  } catch (_) {}
+  const status = r.status === 401 || r.status === 403 ? "auth" : "error";
+  return json({ provider, status, error: `http ${r.status} ${detail}`.trim() });
+}
+
 // First instant of the current UTC month, as an RFC-3339 timestamp.
 function monthStartISO(now) {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
@@ -78,12 +89,7 @@ async function anthropic(env) {
         "user-agent": "QuotaPuter-Relay/1.0",
       },
     });
-    if (r.status === 401 || r.status === 403) {
-      return json({ provider: "anthropic", status: "auth", error: "admin key rejected" });
-    }
-    if (!r.ok) {
-      return json({ provider: "anthropic", status: "error", error: `anthropic http ${r.status}` });
-    }
+    if (!r.ok) return await upstreamError("anthropic", r);
     const body = await r.json();
     for (const bucket of body.data || []) {
       for (const res of bucket.results || []) {
@@ -109,9 +115,8 @@ async function anthropic(env) {
 }
 
 // ---- OpenAI: month-to-date org cost in USD -----------------------------------
-// GET /v1/organizations/costs -> data[].results[].amount.{value,currency}.
-// NOTE: verify against your account — the amount units (USD dollars vs cents)
-// and field names have changed across OpenAI API revisions.
+// GET /v1/organization/costs (singular!) -> data[].results[].amount.{value,currency}
+// where value is USD DOLLARS as a number. Needs an org Admin key (sk-admin...).
 async function openai(env) {
   const key = env.OPENAI_ADMIN_KEY;
   if (!key) return json({ provider: "openai", status: "error", error: "OPENAI_ADMIN_KEY not set" }, 500);
@@ -122,19 +127,15 @@ async function openai(env) {
   let page = null;
 
   for (let i = 0; i < 32; i++) {
-    const u = new URL("https://api.openai.com/v1/organizations/costs");
+    // NOTE: OpenAI uses the SINGULAR "organization" (Anthropic uses plural).
+    const u = new URL("https://api.openai.com/v1/organization/costs");
     u.searchParams.set("start_time", String(startUnix));
     u.searchParams.set("bucket_width", "1d");
     u.searchParams.set("limit", "31");
     if (page) u.searchParams.set("page", page);
 
     const r = await fetch(u, { headers: { authorization: `Bearer ${key}` } });
-    if (r.status === 401 || r.status === 403) {
-      return json({ provider: "openai", status: "auth", error: "admin key rejected" });
-    }
-    if (!r.ok) {
-      return json({ provider: "openai", status: "error", error: `openai http ${r.status}` });
-    }
+    if (!r.ok) return await upstreamError("openai", r);
     const body = await r.json();
     for (const bucket of body.data || []) {
       for (const res of bucket.results || []) {
