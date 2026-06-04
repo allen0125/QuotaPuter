@@ -147,3 +147,18 @@ const quota_provider_t gemini_provider = {
     .fetch_usage = gemini_fetch,
     .validate_config = gemini_validate,
 };
+
+// ChatGPT/Codex subscription PLAN usage (relay reads chatgpt.com wham/usage). This
+// is the plan quota you see in the app — distinct from the `openai` API platform.
+static esp_err_t codex_fetch(quota_result_t *r) { return relay_fetch("codex", "Codex", r); }
+static esp_err_t codex_validate(void) { return relay_validate("codex"); }
+
+const quota_provider_t codex_provider = {
+    .id = "codex",
+    .display_name = "Codex",
+    .region = NULL,
+    .metric_type = QUOTA_METRIC_USAGE,
+    .disclaimer = "CHATGPT PLAN USAGE",
+    .fetch_usage = codex_fetch,
+    .validate_config = codex_validate,
+};

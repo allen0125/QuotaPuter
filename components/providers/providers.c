@@ -13,6 +13,7 @@ void providers_register_all(void) {
         &openai_provider,
         &anthropic_provider,
         &gemini_provider,
+        &codex_provider,
     };
     for (size_t i = 0; i < sizeof(all) / sizeof(all[0]); i++) {
         esp_err_t err = provider_registry_register(all[i]);

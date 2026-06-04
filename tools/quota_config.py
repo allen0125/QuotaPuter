@@ -30,7 +30,7 @@ except ImportError:
     sys.exit("This tool requires pyserial. Install it with: pip install pyserial")
 
 QP_PREFIX = "#QP "
-RELAY_PROVIDERS = {"openai", "anthropic", "gemini"}
+RELAY_PROVIDERS = {"openai", "anthropic", "gemini", "codex"}
 DIRECT_PROVIDERS = {"minimax_cn", "minimax_global", "kimi"}
 ALL_PROVIDERS = sorted(RELAY_PROVIDERS | DIRECT_PROVIDERS)
 

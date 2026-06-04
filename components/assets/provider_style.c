@@ -14,6 +14,7 @@ static const struct {
     {"anthropic",      0xCAC6, "AN"},  // clay/coral
     {"gemini",         0x451F, "GE"},  // blue
     {"kimi",           0x8A1F, "KI"},  // violet
+    {"codex",          0x4E99, "CX"},  // slate
 };
 
 provider_style_t provider_style_get(const char *id) {

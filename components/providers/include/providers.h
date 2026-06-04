@@ -20,6 +20,7 @@ extern const quota_provider_t kimi_provider;
 extern const quota_provider_t openai_provider;
 extern const quota_provider_t anthropic_provider;
 extern const quota_provider_t gemini_provider;
+extern const quota_provider_t codex_provider;  // ChatGPT/Codex plan usage
 
 #ifdef __cplusplus
 }
