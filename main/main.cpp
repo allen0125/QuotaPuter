@@ -15,6 +15,7 @@
 #include <M5Unified.h>
 
 #include "provider_registry.h"
+#include "providers.h"
 #include "secret_store.h"
 #include "wifi_manager.h"
 
@@ -66,6 +67,9 @@ extern "C" void app_main(void) {
     }
     ESP_ERROR_CHECK(nverr);
     ESP_ERROR_CHECK(secret_store_init());
+
+    // Register all providers into the registry.
+    providers_register_all();
 
     // Networking: bring up Wi-Fi and connect with saved credentials if any.
     ESP_ERROR_CHECK(wifi_manager_init());

@@ -50,6 +50,10 @@ typedef struct {
     float limit;       // total allowance, when has_limit
     float remaining;   // limit - used, when known
     float percentage;  // 0..100 used%, when known
+    float aux1;        // optional secondary metric (e.g. Kimi cash balance)
+    float aux2;        // optional secondary metric (e.g. Kimi voucher balance)
+    char aux1_label[12];  // label for aux1 (e.g. "CASH"), empty if unused
+    char aux2_label[12];  // label for aux2 (e.g. "VOUCHER"), empty if unused
     int64_t reset_at;  // unix seconds of next reset/window end, 0 if none
     int64_t updated_at;// unix seconds of this successful fetch, 0 if never
     bool has_limit;    // whether `limit` is meaningful
@@ -63,6 +67,7 @@ typedef struct {
     const char *display_name;  // e.g. "MiniMax CN"
     const char *region;        // short badge, e.g. "CN" / "GL" / NULL
     const char *metric_type;   // one of QUOTA_METRIC_*
+    const char *disclaimer;    // detail-page banner (PRD §11), may be NULL
     // Perform one read-only query and fill *result. Must set result->status and,
     // on success, result->updated_at. Returns ESP_OK on a successful fetch.
     esp_err_t (*fetch_usage)(quota_result_t *result);

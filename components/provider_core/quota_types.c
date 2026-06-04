@@ -16,6 +16,10 @@ void quota_result_init(quota_result_t *r, const char *provider_id) {
     r->limit = NAN;
     r->remaining = NAN;
     r->percentage = NAN;
+    r->aux1 = NAN;
+    r->aux2 = NAN;
+    r->aux1_label[0] = '\0';
+    r->aux2_label[0] = '\0';
     r->has_limit = false;
     r->cached = false;
     r->reset_at = 0;
