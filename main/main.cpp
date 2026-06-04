@@ -19,47 +19,21 @@
 #include "providers.h"
 #include "provisioner.h"
 #include "secret_store.h"
+#include "ui.h"
 #include "wifi_manager.h"
 
 #define QUOTAPUTER_VERSION "0.1.0"
 
 namespace {
 constexpr char TAG[] = "quotaputer";
-
-// RGB565 literals (avoid relying on Arduino TFT_* macros under pure ESP-IDF).
-constexpr uint16_t COL_BLACK = 0x0000;
-constexpr uint16_t COL_GREEN = 0x07E0;
-constexpr uint16_t COL_WHITE = 0xFFFF;
-constexpr uint16_t COL_GRAY = 0x8410;
-
-void draw_splash() {
-    auto &lcd = M5.Display;
-    lcd.setRotation(1);  // 240x135 landscape
-    lcd.setColorDepth(16);
-    lcd.fillScreen(COL_BLACK);
-
-    lcd.setTextColor(COL_GREEN, COL_BLACK);
-    lcd.setTextSize(2);
-    lcd.setCursor(28, 44);
-    lcd.print("QUOTAPUTER");
-
-    lcd.setTextSize(1);
-    lcd.setTextColor(COL_WHITE, COL_BLACK);
-    lcd.setCursor(28, 70);
-    lcd.printf("v%s", QUOTAPUTER_VERSION);
-
-    lcd.setTextColor(COL_GRAY, COL_BLACK);
-    lcd.setCursor(28, 86);
-    lcd.print("LLM quota viewer");
-
-    // Simple framed pixel border to set the retro tone.
-    lcd.drawRect(0, 0, lcd.width(), lcd.height(), COL_GREEN);
-}
 }  // namespace
 
 extern "C" void app_main(void) {
     auto cfg = M5.config();
     M5.begin(cfg);
+    ui::init();
+    ui::splash(QUOTAPUTER_VERSION);
+
     // Persistent storage: default NVS (used by the Wi-Fi stack and app prefs)
     // plus the dedicated secret partition for credentials.
     esp_err_t nverr = nvs_flash_init();
@@ -89,8 +63,6 @@ extern "C" void app_main(void) {
              QUOTAPUTER_VERSION, (int)M5.Display.width(), (int)M5.Display.height(),
              (unsigned)provider_registry_count(),
              secret_store_has_wifi() ? "set" : "unset");
-
-    draw_splash();
 
     for (;;) {
         M5.update();
