@@ -14,6 +14,7 @@
 #include "nvs_flash.h"
 #include <M5Unified.h>
 
+#include "app.h"
 #include "keyboard.h"
 #include "provider_registry.h"
 #include "providers.h"
@@ -64,19 +65,6 @@ extern "C" void app_main(void) {
              (unsigned)provider_registry_count(),
              secret_store_has_wifi() ? "set" : "unset");
 
-    for (;;) {
-        M5.update();
-        kb_event_t ev;
-        while (keyboard_poll(&ev)) {
-            if (ev.ch != 0) {
-                ESP_LOGI(TAG, "key '%c'%s%s", ev.ch, ev.shift ? " +shift" : "",
-                         ev.long_press ? " (long)" : "");
-            } else if (ev.enter) {
-                ESP_LOGI(TAG, "ENTER");
-            } else if (ev.del) {
-                ESP_LOGI(TAG, "DEL%s%s", ev.fn ? " +fn" : "", ev.long_press ? " (long)" : "");
-            }
-        }
-        vTaskDelay(pdMS_TO_TICKS(20));
-    }
+    // Hand off to the UI state machine (never returns).
+    app_run(QUOTAPUTER_VERSION);
 }

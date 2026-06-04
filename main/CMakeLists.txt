@@ -1,4 +1,4 @@
 idf_component_register(
-    SRCS "main.cpp"
+    SRCS "main.cpp" "refresh.cpp" "app.cpp"
     INCLUDE_DIRS "."
-    REQUIRES m5unified provider_core providers secret_store cache http_client wifi_manager provisioner keyboard display nvs_flash)
+    REQUIRES m5unified provider_core providers secret_store cache http_client wifi_manager provisioner keyboard display nvs_flash esp_timer esp_system)
