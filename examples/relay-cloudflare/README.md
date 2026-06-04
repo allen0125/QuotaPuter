@@ -35,7 +35,7 @@ wrangler login
 
 # Set the admin keys as secrets (never committed):
 wrangler secret put ANTHROPIC_ADMIN_KEY   # sk-ant-admin... (Console -> Admin keys)
-wrangler secret put OPENAI_ADMIN_KEY      # sk-admin...     (optional)
+wrangler secret put OPENAI_ADMIN_KEY      # sk-admin... org Admin key, Read-only perm is enough (optional)
 wrangler secret put DEVICE_TOKEN          # optional shared secret (see below)
 
 wrangler deploy
