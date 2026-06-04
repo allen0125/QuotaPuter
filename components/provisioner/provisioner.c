@@ -242,7 +242,9 @@ esp_err_t provisioner_start(void) {
         ESP_LOGE(TAG, "usb_serial_jtag install failed: %s", esp_err_to_name(err));
         return err;
     }
-    if (xTaskCreate(provisioner_task, "provisioner", 6144, NULL, 5, NULL) != pdPASS) {
+    // 16 KB: add_provider runs a test HTTPS query, whose mbedTLS handshake needs
+    // a large stack (~8 KB) on top of the fetch buffers — 6 KB overflows.
+    if (xTaskCreate(provisioner_task, "provisioner", 16384, NULL, 5, NULL) != pdPASS) {
         return ESP_ERR_NO_MEM;
     }
     ESP_LOGI(TAG, "provisioning protocol ready on USB-Serial-JTAG");

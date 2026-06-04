@@ -159,7 +159,9 @@ void init() {
             sl->e.have_data = true;
         }
     }
-    xTaskCreate(worker, "refresh", 6144, NULL, 4, NULL);
+    // 16 KB: a refresh does an HTTPS request, and the mbedTLS handshake alone
+    // needs ~8 KB on the caller's stack (plus our ~3 KB of fetch buffers).
+    xTaskCreate(worker, "refresh", 16384, NULL, 4, NULL);
     ESP_LOGI(TAG, "refresh manager started (%d providers, %d min interval)", s_count,
              s_interval_min);
 }
