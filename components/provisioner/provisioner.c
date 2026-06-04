@@ -17,7 +17,7 @@
 static const char *TAG = "provisioner";
 
 #define QP_PREFIX "#QP "
-#define LINE_MAX 1400
+#define QP_LINE_MAX 1400
 
 // ---- response helpers -------------------------------------------------------
 
@@ -206,7 +206,7 @@ static void handle_line(const char *line) {
 
 static void provisioner_task(void *arg) {
     (void)arg;
-    static char line[LINE_MAX];
+    static char line[QP_LINE_MAX];
     size_t len = 0;
     uint8_t rx[256];
     for (;;) {

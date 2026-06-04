@@ -14,6 +14,7 @@
 #include "nvs_flash.h"
 #include <M5Unified.h>
 
+#include "keyboard.h"
 #include "provider_registry.h"
 #include "providers.h"
 #include "provisioner.h"
@@ -81,6 +82,9 @@ extern "C" void app_main(void) {
     // USB-Serial-JTAG provisioning protocol (PC config tool talks to this).
     ESP_ERROR_CHECK(provisioner_start());
 
+    // Cardputer keyboard (after M5.begin so the display init keeps off our pins).
+    ESP_ERROR_CHECK(keyboard_init());
+
     ESP_LOGI(TAG, "QuotaPuter v%s booting (display %dx%d, %u providers, wifi=%s)",
              QUOTAPUTER_VERSION, (int)M5.Display.width(), (int)M5.Display.height(),
              (unsigned)provider_registry_count(),
@@ -90,6 +94,17 @@ extern "C" void app_main(void) {
 
     for (;;) {
         M5.update();
-        vTaskDelay(pdMS_TO_TICKS(50));
+        kb_event_t ev;
+        while (keyboard_poll(&ev)) {
+            if (ev.ch != 0) {
+                ESP_LOGI(TAG, "key '%c'%s%s", ev.ch, ev.shift ? " +shift" : "",
+                         ev.long_press ? " (long)" : "");
+            } else if (ev.enter) {
+                ESP_LOGI(TAG, "ENTER");
+            } else if (ev.del) {
+                ESP_LOGI(TAG, "DEL%s%s", ev.fn ? " +fn" : "", ev.long_press ? " (long)" : "");
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(20));
     }
 }
