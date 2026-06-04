@@ -13,6 +13,8 @@
 #include "esp_log.h"
 #include <M5Unified.h>
 
+#include "provider_registry.h"
+
 #define QUOTAPUTER_VERSION "0.1.0"
 
 namespace {
@@ -52,8 +54,9 @@ void draw_splash() {
 extern "C" void app_main(void) {
     auto cfg = M5.config();
     M5.begin(cfg);
-    ESP_LOGI(TAG, "QuotaPuter v%s booting (display %dx%d)", QUOTAPUTER_VERSION,
-             (int)M5.Display.width(), (int)M5.Display.height());
+    ESP_LOGI(TAG, "QuotaPuter v%s booting (display %dx%d, %u providers registered)",
+             QUOTAPUTER_VERSION, (int)M5.Display.width(), (int)M5.Display.height(),
+             (unsigned)provider_registry_count());
 
     draw_splash();
 
