@@ -30,6 +30,39 @@ Each `GET /<provider>` returns the standardized record the firmware parses:
 - `/gemini` — **TODO**: Gemini/Cloud usage needs a Cloud Monitoring `timeSeries`
   query (metric `generativelanguage.googleapis.com/...`) with a service-account
   token. Returns `status:"error"` until you fill in `gemini()` in `src/index.js`.
+- `/codex` — your **ChatGPT subscription plan** usage (the 5h + weekly "% used"
+  windows), via the same undocumented endpoint the official Codex CLI polls
+  (`GET chatgpt.com/backend-api/wham/usage`). This is **not** the developer API
+  platform — it's the plan/quota you see in the app. See setup below.
+
+## /codex (ChatGPT plan usage) setup
+
+This route reads usage with your `codex login` OAuth tokens (kept server-side,
+auto-refreshed). It is an **undocumented** surface OpenAI's own CLI uses, so it
+may change — treat it as best-effort.
+
+```bash
+# 1) Log in Codex with your ChatGPT account if you haven't:
+codex login
+
+# 2) Grab the refresh token from ~/.codex/auth.json and set it as a secret:
+python3 -c "import json,os;print(json.load(open(os.path.expanduser('~/.codex/auth.json')))['tokens']['refresh_token'])" \
+  | wrangler secret put CODEX_REFRESH_TOKEN
+
+# 3) Create the KV namespace and paste its id into wrangler.toml (kv_namespaces.id):
+wrangler kv namespace create TOKENS
+
+# 4) Deploy and verify the RAW response shape first:
+wrangler deploy
+curl "https://quotaputer-relay.<sub>.workers.dev/codex?debug=1" -H "Authorization: Bearer <DEVICE_TOKEN>"
+# then without ?debug for the standardized record:
+curl  "https://quotaputer-relay.<sub>.workers.dev/codex"        -H "Authorization: Bearer <DEVICE_TOKEN>"
+```
+
+Point a device provider at `…/codex` (it reports `percentage` + `reset_at`, so the
+device shows a "% used" bar that counts down to the window reset). The `?debug=1`
+dump lets you confirm the real field names; the parser already tolerates common
+camelCase/snake_case variants.
 
 ## Deploy
 

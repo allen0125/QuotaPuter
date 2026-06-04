@@ -5,3 +5,11 @@
 name = "quotaputer-relay"
 main = "src/index.js"
 compatibility_date = "2024-11-01"
+
+# KV namespace that caches + rotates the ChatGPT OAuth tokens for the /codex
+# (ChatGPT/Codex plan usage) route. Only needed if you use /codex.
+# Create it once:  wrangler kv namespace create TOKENS
+# then paste the printed id below.
+[[kv_namespaces]]
+binding = "TOKENS"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"

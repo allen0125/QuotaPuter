@@ -30,6 +30,9 @@ export default {
     }
 
     try {
+      if (provider === "codex") {
+        return await codexUsage(env, new URL(request.url).searchParams.has("debug"));
+      }
       if (provider === "anthropic") return await anthropic(env);
       if (provider === "openai") return await openai(env);
       if (provider === "gemini") return await gemini(env);
@@ -191,5 +194,146 @@ async function gemini(env) {
     reset_at: null,
     updated_at: new Date().toISOString(),
     status: "error", // not implemented — fill in the Cloud Monitoring query
+  });
+}
+
+// ---- Codex / ChatGPT plan usage ----------------------------------------------
+// Reads your ChatGPT subscription plan usage (the 5h + weekly "% used" windows)
+// via the same undocumented endpoint the official Codex CLI polls:
+//   GET https://chatgpt.com/backend-api/wham/usage   (Bearer ChatGPT OAuth token)
+// Tokens come from `codex login`. Set CODEX_REFRESH_TOKEN (from ~/.codex/auth.json
+// -> tokens.refresh_token) as a secret; the Worker refreshes the short-lived
+// access token via OAuth and persists the rotated tokens in the TOKENS KV
+// namespace. NOTE: undocumented surface — fields may shift; use ?debug=1 to dump
+// the raw response, then tighten the parser below.
+const CODEX_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
+const CODEX_TOKEN_URL = "https://auth.openai.com/oauth/token";
+const CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
+
+function b64urlToJson(seg) {
+  const b64 = seg.replace(/-/g, "+").replace(/_/g, "/");
+  const pad = b64.padEnd(Math.ceil(b64.length / 4) * 4, "=");
+  return JSON.parse(decodeURIComponent(escape(atob(pad))));
+}
+function jwtClaim(token, path) {
+  try {
+    const p = b64urlToJson(token.split(".")[1]);
+    const auth = p["https://api.openai.com/auth"] || {};
+    return auth[path] ?? p[path] ?? null;
+  } catch (_) {
+    return null;
+  }
+}
+function jwtExpMs(token) {
+  try {
+    return (b64urlToJson(token.split(".")[1]).exp || 0) * 1000;
+  } catch (_) {
+    return 0;
+  }
+}
+
+async function refreshCodexToken(refresh) {
+  const body = new URLSearchParams({
+    grant_type: "refresh_token",
+    refresh_token: refresh,
+    client_id: CODEX_CLIENT_ID,
+  });
+  const r = await fetch(CODEX_TOKEN_URL, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  if (!r.ok) throw new Error(`token refresh ${r.status} ${(await r.text()).slice(0, 150)}`);
+  return await r.json(); // { access_token, refresh_token, id_token, expires_in }
+}
+
+async function codexAccessToken(env) {
+  if (!env.TOKENS) throw new Error("bind a KV namespace as TOKENS (see README)");
+  let stored = null;
+  const cached = await env.TOKENS.get("codex");
+  if (cached) stored = JSON.parse(cached);
+
+  const now = Date.now();
+  if (stored && stored.access && stored.exp - now > 60000) return stored;
+
+  const refresh = (stored && stored.refresh) || env.CODEX_REFRESH_TOKEN;
+  if (!refresh) throw new Error("no refresh token (set CODEX_REFRESH_TOKEN)");
+
+  const tok = await refreshCodexToken(refresh);
+  const access = tok.access_token;
+  const next = {
+    access,
+    refresh: tok.refresh_token || refresh,
+    exp: jwtExpMs(access) || now + (tok.expires_in || 3600) * 1000,
+    accountId: jwtClaim(access, "chatgpt_account_id"),
+  };
+  await env.TOKENS.put("codex", JSON.stringify(next));
+  return next;
+}
+
+// Pull a "used percent" and "reset" out of a window object, tolerating both
+// camelCase and snake_case names since the endpoint is undocumented.
+function windowUsed(w) {
+  if (!w || typeof w !== "object") return null;
+  const v = w.usedPercent ?? w.used_percent ?? w.percent_used ?? w.percent ?? null;
+  return typeof v === "number" ? v : null;
+}
+function windowReset(w) {
+  if (!w || typeof w !== "object") return null;
+  const at = w.resetsAt ?? w.resets_at ?? w.reset_at ?? null;
+  if (typeof at === "number") return at > 1e12 ? Math.floor(at / 1000) : at; // ms or s
+  const inS = w.resetsInSeconds ?? w.resets_in_seconds ?? w.resets_in ?? null;
+  if (typeof inS === "number") return Math.floor(Date.now() / 1000) + inS;
+  return null;
+}
+
+async function codexUsage(env, debug) {
+  const t = await codexAccessToken(env);
+  const headers = {
+    authorization: `Bearer ${t.access}`,
+    "user-agent": "codex_cli_rs/0.0.0 (QuotaPuter relay)",
+    originator: "codex_cli_rs",
+    accept: "application/json",
+  };
+  if (t.accountId) headers["chatgpt-account-id"] = t.accountId;
+
+  const r = await fetch(CODEX_USAGE_URL, { headers });
+  if (!r.ok) return await upstreamError("openai", r);
+  const body = await r.json();
+  if (debug) return json(body); // inspect the raw shape, then tighten below
+
+  const rl = body.rate_limit || body.rateLimits || body.rate_limits || body;
+  const primary = rl.primary || rl.primary_window || null;
+  const secondary = rl.secondary || rl.secondary_window || null;
+  const pu = windowUsed(primary);
+  const su = windowUsed(secondary);
+
+  let used = null;
+  let reset = null;
+  if (pu != null && su != null) {
+    if (su >= pu) { used = su; reset = windowReset(secondary); }
+    else { used = pu; reset = windowReset(primary); }
+  } else if (su != null) { used = su; reset = windowReset(secondary); }
+  else if (pu != null) { used = pu; reset = windowReset(primary); }
+
+  if (used == null) {
+    return json({
+      provider: "openai", metric_type: "usage", title: "Codex Plan",
+      used: null, limit: null, unit: "%", percentage: null, reset_at: null,
+      updated_at: new Date().toISOString(),
+      status: "error", error: "could not parse usage windows — try ?debug=1",
+    });
+  }
+  return json({
+    provider: "openai",
+    metric_type: "usage",
+    title: "Codex Plan",
+    used: Math.round(used * 100) / 100,
+    limit: 100,
+    unit: "%",
+    percentage: Math.round(used * 100) / 100,
+    reset_at: reset ? new Date(reset * 1000).toISOString() : null,
+    updated_at: new Date().toISOString(),
+    status: "ok",
   });
 }
