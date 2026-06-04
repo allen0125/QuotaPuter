@@ -103,6 +103,28 @@ python tools/quota_config.py add-provider anthropic \
 The device immediately runs a read-only test query and shows `CONNECTED` or the
 error. Repeat with `add-provider openai --relay-url .../openai`.
 
+## Region / geo-blocking (important for HK & mainland China)
+
+OpenAI/ChatGPT reject requests from unsupported regions (Hong Kong, mainland
+China) with `unsupported_country_region_territory`. A Worker's outbound `fetch()`
+egresses from the **data center where the Worker runs**, which by default is the
+one nearest your *device* — so a device in HK makes the Worker egress from HK and
+the call is blocked.
+
+Fix (already in `wrangler.toml`): a placement hint pins the Worker near Tokyo so
+egress is a Japan IP:
+
+```toml
+[placement]
+region = "aws:ap-northeast-1"   # or gcp:asia-northeast1 / azure:japaneast
+```
+
+Cloudflare does **not** let you pick an arbitrary egress country directly; the
+placement hint targets a cloud region and runs the Worker in the nearest CF data
+center (Tokyo for `ap-northeast-1`). If you need a hard guarantee of Japan
+egress, run this relay on a Tokyo-region host instead (Google Cloud Run
+`asia-northeast1` or Fly.io `nrt`) — same code, managed HTTPS, fixed JP egress.
+
 ## Security notes
 
 - The Anthropic **Admin API key** (`sk-ant-admin...`) only exists in the Worker
