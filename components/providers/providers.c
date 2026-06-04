@@ -9,7 +9,8 @@ void providers_register_all(void) {
     const quota_provider_t *all[] = {
         &minimax_cn_provider,
         &minimax_global_provider,
-        // kimi + relay providers are registered as their modules land.
+        &kimi_provider,
+        // relay providers are registered as their module lands.
     };
     for (size_t i = 0; i < sizeof(all) / sizeof(all[0]); i++) {
         esp_err_t err = provider_registry_register(all[i]);
