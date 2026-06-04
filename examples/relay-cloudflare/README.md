@@ -20,8 +20,13 @@ Each `GET /<provider>` returns the standardized record the firmware parses:
 - `/anthropic` — month-to-date org **cost in USD** via
   `GET /v1/organizations/cost_report` (sums `data[].results[].amount`, which are
   decimal strings in **cents**). **Implemented & schema-verified.**
-- `/openai` — month-to-date org cost via `GET /v1/organizations/costs`.
-  Implemented, but verify the amount units against your account.
+- `/openai` — org **cost in USD** via `GET /v1/organization/costs`. OpenAI has
+  **no official credit-balance API** (the "% used" bar in the dashboard needs a
+  login session, which this project won't scrape). So by default this reports
+  *this month's* spend. Set `OPENAI_BUDGET_USD` to your total prepaid/budget and
+  it instead reports **cumulative spend vs that budget as a percentage**, so the
+  device shows a "% used" progress bar. `OPENAI_START` (e.g. `2026-01-01`) sets
+  where cumulative summing begins.
 - `/gemini` — **TODO**: Gemini/Cloud usage needs a Cloud Monitoring `timeSeries`
   query (metric `generativelanguage.googleapis.com/...`) with a service-account
   token. Returns `status:"error"` until you fill in `gemini()` in `src/index.js`.
@@ -37,6 +42,10 @@ wrangler login
 wrangler secret put ANTHROPIC_ADMIN_KEY   # sk-ant-admin... (Console -> Admin keys)
 wrangler secret put OPENAI_ADMIN_KEY      # sk-admin... org Admin key, Read-only perm is enough (optional)
 wrangler secret put DEVICE_TOKEN          # optional shared secret (see below)
+
+# Optional: make /openai show "% used" instead of $ spent (no OpenAI credit API):
+echo "100" | wrangler secret put OPENAI_BUDGET_USD   # your total prepaid/budget in USD
+# echo "2026-01-01" | wrangler secret put OPENAI_START  # optional: cumulative start date
 
 wrangler deploy
 # -> https://quotaputer-relay.<your-subdomain>.workers.dev

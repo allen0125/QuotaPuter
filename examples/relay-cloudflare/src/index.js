@@ -122,7 +122,15 @@ async function openai(env) {
   if (!key) return json({ provider: "openai", status: "error", error: "OPENAI_ADMIN_KEY not set" }, 500);
 
   const now = new Date();
-  const startUnix = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1) / 1000);
+  // OpenAI has NO official credit-balance API. If you set OPENAI_BUDGET_USD to
+  // your total prepaid/budget, the relay reports cumulative spend vs that budget
+  // as a percentage (so the device can show a "% used" bar). Without it, it just
+  // reports this month's spend in USD. OPENAI_START (an RFC date like
+  // "2026-01-01") overrides where cumulative summing begins (default ~2 years).
+  const budget = env.OPENAI_BUDGET_USD ? parseFloat(env.OPENAI_BUDGET_USD) : null;
+  const startUnix = env.OPENAI_START
+    ? Math.floor(Date.parse(env.OPENAI_START) / 1000)
+    : Math.floor(Date.UTC(now.getUTCFullYear() - (budget ? 2 : 0), now.getUTCMonth(), 1) / 1000);
   let total = 0;
   let page = null;
 
@@ -147,7 +155,7 @@ async function openai(env) {
     else break;
   }
 
-  return json({
+  const resp = {
     provider: "openai",
     metric_type: "usage",
     title: "OpenAI API",
@@ -158,7 +166,12 @@ async function openai(env) {
     reset_at: null,
     updated_at: now.toISOString(),
     status: "ok",
-  });
+  };
+  if (budget && budget > 0) {
+    resp.limit = Math.round(budget * 100) / 100;
+    resp.percentage = Math.round((total / budget) * 10000) / 100;  // % used; device shows a bar
+  }
+  return json(resp);
 }
 
 // ---- Gemini: TODO ------------------------------------------------------------
