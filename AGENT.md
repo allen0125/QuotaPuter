@@ -23,38 +23,6 @@ M5Stack Cardputer (ESP32-S3) 上的 LLM 额度查看固件，纯 **ESP-IDF** 开
 
 **官方组件** — [M5Unified + M5GFX](https://github.com/m5stack/M5Unified)（Registry `m5stack/m5unified`，含 Cardputer 支持）
 
-## 组件状态
-
-| 组件 | 状态 | 说明 |
-|------|------|------|
-| `display` | ✅ | ST7789 240×135 横屏 SPI |
-| `wifi_manager` | ✅ | Wi-Fi station 模式 |
-| `http_client` | ✅ | HTTPS + 证书校验 |
-| `secret_store` | ✅ | NVS 凭证存储 |
-| `cache` | ✅ | NVS 离线缓存 |
-| `provisioner` | ✅ | USB-Serial-JTAG 配置协议 |
-| `minimax_cn` | ✅ | 需用真实 API 验证字段 |
-| `keyboard` | ❌ 需重写 | 当前为错误的 I2C 实现，改 74HC138 矩阵扫描 |
-| `minimax_global` | ⏳ | 参考 minimax_cn，Host `www.minimax.io` |
-| `kimi` | ⏳ | `api.moonshot.cn/v1/balance`，展示可用 / 现金 / 代金券余额 |
-| `openai` | ⏳ | relay 模式；标记 `API USAGE · NOT CHATGPT PLAN` |
-| `anthropic` | ⏳ | relay 模式，Claude Code 报告；标记 `ORG USAGE · NOT CLAUDE PRO/MAX` |
-| `gemini` | ⏳ | relay 模式；标记 `CLOUD PROJECT · NOT GOOGLE AI PLAN` |
-| `provider_core` | ⏳ | 从 NVS 读取已启用 Provider，refresh 调用对应 `fetch()` |
-| `main.c` | ⏳ | 多 Provider 首页轮播 |
-| `tools/quota_config.py` | ⏳ | PC 端配置工具 |
-| `config/providers.example.json` | ⏳ | 示例配置 |
-
-## 开发顺序
-
-1. **keyboard 重写**（最高）— 74HC138 矩阵扫描、56 键映射、长按 (500ms)、FN+Shift、按键回调；验证全键响应。
-2. **Provider 完善**（高）— provider_core → minimax_global → kimi → openai → anthropic → gemini。
-3. **主程序与 UI**（中）— main.c 多卡片轮播（←→ 切换 / Enter 详情 / R 刷新 / S 设置 / W Wi-Fi / 长按 D 删除 / Fn+Del 清空）；详情页、Wi-Fi 配置页、设置页、安全清除页。
-4. **配置工具**（低）— quota_config.py（add/remove-provider、wifi、list、factory-reset）+ 示例配置。
-5. **文档与资产** — PROVISIONING.md、SECURITY.md、README（覆盖 PRD §13）；像素 Logo 16×16 / 24×24（色彩见 PRD §8.2）。
-
-详细步骤与验收清单见 [docs/PRD.md](docs/PRD.md)。
-
 ## Commit 规范
 
 格式 `[Step X.X] <英文简述>`，例如：
