@@ -11,9 +11,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "nvs_flash.h"
 #include <M5Unified.h>
 
 #include "provider_registry.h"
+#include "secret_store.h"
 
 #define QUOTAPUTER_VERSION "0.1.0"
 
@@ -54,9 +56,20 @@ void draw_splash() {
 extern "C" void app_main(void) {
     auto cfg = M5.config();
     M5.begin(cfg);
-    ESP_LOGI(TAG, "QuotaPuter v%s booting (display %dx%d, %u providers registered)",
+    // Persistent storage: default NVS (used by the Wi-Fi stack and app prefs)
+    // plus the dedicated secret partition for credentials.
+    esp_err_t nverr = nvs_flash_init();
+    if (nverr == ESP_ERR_NVS_NO_FREE_PAGES || nverr == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        nverr = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(nverr);
+    ESP_ERROR_CHECK(secret_store_init());
+
+    ESP_LOGI(TAG, "QuotaPuter v%s booting (display %dx%d, %u providers, wifi=%s)",
              QUOTAPUTER_VERSION, (int)M5.Display.width(), (int)M5.Display.height(),
-             (unsigned)provider_registry_count());
+             (unsigned)provider_registry_count(),
+             secret_store_has_wifi() ? "set" : "unset");
 
     draw_splash();
 
