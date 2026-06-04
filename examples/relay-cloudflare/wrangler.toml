@@ -1,0 +1,7 @@
+# QuotaPuter relay — Cloudflare Worker config.
+# Deploy: `npx wrangler deploy` (gives an https://<name>.<subdomain>.workers.dev URL
+# with a publicly-trusted cert, which the Cardputer requires).
+# Secrets are NOT stored here — set them with `wrangler secret put` (see README).
+name = "quotaputer-relay"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
