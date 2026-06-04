@@ -16,6 +16,7 @@
 
 #include "provider_registry.h"
 #include "providers.h"
+#include "provisioner.h"
 #include "secret_store.h"
 #include "wifi_manager.h"
 
@@ -76,6 +77,9 @@ extern "C" void app_main(void) {
     if (secret_store_has_wifi()) {
         wifi_manager_start_saved();
     }
+
+    // USB-Serial-JTAG provisioning protocol (PC config tool talks to this).
+    ESP_ERROR_CHECK(provisioner_start());
 
     ESP_LOGI(TAG, "QuotaPuter v%s booting (display %dx%d, %u providers, wifi=%s)",
              QUOTAPUTER_VERSION, (int)M5.Display.width(), (int)M5.Display.height(),
