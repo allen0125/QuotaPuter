@@ -25,6 +25,17 @@ void init();
 void clear(uint16_t color = BLACK);
 void splash(const char *version);
 
+// Push the off-screen frame buffer to the panel. Call once after composing a
+// frame; double-buffering means the screen never shows a partial/blanked frame.
+void present();
+
+// Frame-buffer geometry and raw rect helpers (so callers never touch M5.Display
+// directly and everything lands in the same off-screen buffer).
+int width();
+int height();
+void fill_rect(int x, int y, int w, int h, uint16_t color);
+void draw_rect(int x, int y, int w, int h, uint16_t color);
+
 // Status -> colour. For balance metrics pass is_balance=true and the remaining
 // balance; otherwise pass the used percentage.
 uint16_t status_color(int status, float used_pct, bool is_balance, float remaining);

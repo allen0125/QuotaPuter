@@ -11,19 +11,47 @@
 
 namespace ui {
 namespace {
-inline M5GFX &gfx() { return M5.Display; }
+// Off-screen frame buffer. All drawing targets this canvas and is pushed to the
+// panel in one blit by present(), which eliminates the per-frame clear flicker.
+M5Canvas s_canvas(&M5.Display);
+LovyanGFX *s_g = &M5.Display;  // falls back to direct draw if the sprite fails
+bool s_buffered = false;
+
+inline LovyanGFX &gfx() { return *s_g; }
 }  // namespace
 
 void init() {
-    auto &d = gfx();
+    auto &d = M5.Display;
     d.setRotation(1);  // 240x135 landscape
     d.setColorDepth(16);
-    d.setTextWrap(false);
     d.setBrightness(160);
     d.fillScreen(BLACK);
+
+    s_canvas.setColorDepth(16);
+    s_canvas.setTextWrap(false);
+    // 240x135x2 = ~64 KB; allocated early (before Wi-Fi/TLS) so it fits in the
+    // PSRAM-less Cardputer's internal RAM. Fall back to direct drawing if not.
+    if (s_canvas.createSprite(d.width(), d.height()) != nullptr) {
+        s_buffered = true;
+        s_g = &s_canvas;
+    } else {
+        s_g = &d;
+    }
+    gfx().fillScreen(BLACK);
+}
+
+void present() {
+    if (s_buffered) {
+        s_canvas.pushSprite(0, 0);
+    }
 }
 
 void clear(uint16_t color) { gfx().fillScreen(color); }
+
+int width() { return gfx().width(); }
+int height() { return gfx().height(); }
+void fill_rect(int x, int y, int w, int h, uint16_t color) { gfx().fillRect(x, y, w, h, color); }
+void draw_rect(int x, int y, int w, int h, uint16_t color) { gfx().drawRect(x, y, w, h, color); }
 
 int text_width(const char *s, int size) {
     auto &d = gfx();
@@ -52,6 +80,7 @@ void splash(const char *version) {
     snprintf(buf, sizeof(buf), "v%s", version);
     text_center(74, buf, WHITE, BLACK, 1);
     text_center(92, "LLM quota viewer", GRAY, BLACK, 1);
+    present();
 }
 
 uint16_t status_color(int status, float used_pct, bool is_balance, float remaining) {

@@ -50,8 +50,6 @@ const char *SETTINGS_LABELS[SETTINGS_ITEMS] = {
     "Refresh interval", "Wi-Fi setup", "Manage providers", "Device info", "Back"};
 const int INTERVALS[4] = {1, 5, 15, 30};
 
-inline M5GFX &lcd() { return M5.Display; }
-
 bool is_balance(const refresh::Entry &e) {
     return strcmp(e.prov->metric_type, QUOTA_METRIC_BALANCE) == 0;
 }
@@ -123,10 +121,11 @@ uint16_t entry_color(const refresh::Entry &e) {
 
 void toast(const char *msg, uint16_t color) {
     int w = ui::text_width(msg, 1) + 16;
-    int x = (lcd().width() - w) / 2;
-    lcd().fillRect(x, 54, w, 22, ui::DARK);
-    lcd().drawRect(x, 54, w, 22, color);
+    int x = (ui::width() - w) / 2;
+    ui::fill_rect(x, 54, w, 22, ui::DARK);
+    ui::draw_rect(x, 54, w, 22, color);
     ui::text(x + 8, 61, msg, color, ui::DARK, 1);
+    ui::present();
     vTaskDelay(pdMS_TO_TICKS(900));
 }
 
@@ -151,7 +150,7 @@ void render_overview() {
     uint16_t col = entry_color(e);
 
     const int cx = 6, cy = 20, cw = 228, ch = 86;
-    lcd().drawRect(cx, cy, cw, ch, col);
+    ui::draw_rect(cx, cy, cw, ch, col);
     ui::provider_logo(cx + 8, cy + 10, 28, e.prov->id, e.prov->region);
     ui::text(cx + 44, cy + 8, e.prov->display_name, ui::WHITE, ui::BLACK, 1);
     ui::status_badge(cx + cw - 44, cy + 8, disp_status(e));
@@ -250,7 +249,7 @@ void render_settings() {
         int y = 24 + i * 16;
         uint16_t fg = (i == st.menu_sel) ? ui::BLACK : ui::WHITE;
         uint16_t bg = (i == st.menu_sel) ? ui::GREEN : ui::BLACK;
-        if (i == st.menu_sel) lcd().fillRect(4, y - 2, 232, 14, ui::GREEN);
+        if (i == st.menu_sel) ui::fill_rect(4, y - 2, 232, 14, ui::GREEN);
         char line[48];
         if (i == 0) {
             snprintf(line, sizeof(line), "%s: %d min", SETTINGS_LABELS[0],
@@ -268,12 +267,12 @@ void render_wifi() {
     ui::title_bar("WI-FI SETUP", wifi_manager_is_connected(), wifi_manager_rssi());
     ui::text(8, 28, "SSID:", ui::WHITE, ui::BLACK, 1);
     uint16_t ssid_col = st.field == 0 ? ui::GREEN : ui::WHITE;
-    lcd().drawRect(8, 40, 224, 16, ssid_col);
+    ui::draw_rect(8, 40, 224, 16, ssid_col);
     ui::text(12, 44, st.ssid, ui::WHITE, ui::BLACK, 1);
 
     ui::text(8, 64, "PASSWORD:", ui::WHITE, ui::BLACK, 1);
     uint16_t pass_col = st.field == 1 ? ui::GREEN : ui::WHITE;
-    lcd().drawRect(8, 76, 224, 16, pass_col);
+    ui::draw_rect(8, 76, 224, 16, pass_col);
     char masked[SECRET_STORE_PASS_MAXLEN];
     size_t pl = strlen(st.pass);
     for (size_t i = 0; i < pl && i < sizeof(masked) - 1; i++) masked[i] = '*';
@@ -290,7 +289,7 @@ void render_manage() {
     for (int i = 0; i < n; i++) {
         const quota_provider_t *p = provider_registry_get(i);
         int y = 22 + i * 15;
-        if (i == st.menu_sel) lcd().fillRect(4, y - 2, 232, 13, ui::DARK);
+        if (i == st.menu_sel) ui::fill_rect(4, y - 2, 232, 13, ui::DARK);
         bool configured = secret_store_provider_configured(p->id);
         bool enabled = secret_store_provider_enabled(p->id);
         const char *mark = enabled ? "[x]" : (configured ? "[ ]" : "[-]");
@@ -337,6 +336,7 @@ void render() {
         case SCR_MANAGE:   render_manage();   break;
         case SCR_DEVICE:   render_device();   break;
     }
+    ui::present();  // push the composed frame in one blit (no flicker)
 }
 
 // ---- input ------------------------------------------------------------------
