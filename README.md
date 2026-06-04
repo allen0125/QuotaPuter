@@ -35,8 +35,8 @@ QuotaPuter only calls official, publicly documented endpoints.
 
 | Provider | Region / type | Shows | Auth |
 | --- | --- | --- | --- |
-| MiniMax | CN (Token Plan) | remaining %, used/total, reset window | Subscription Key (direct) |
-| MiniMax | Global (Token Plan) | remaining %, used/total, reset window | Subscription Key (direct) |
+| MiniMax | CN (Token Plan) | interval & weekly remaining %, reset window | Subscription Key (direct) |
+| MiniMax | Global (Token Plan) | interval & weekly remaining %, reset window | Subscription Key (direct) |
 | Kimi | API balance | available / cash / voucher (CNY) | API Key (direct) |
 | OpenAI | API org usage | tokens / cost | Admin key via **relay** |
 | Anthropic | Console org usage | usage / cost | Admin key via **relay** |
@@ -55,7 +55,10 @@ region badges:
 | `minimax_cn` | `CN` | `www.minimaxi.com` |
 | `minimax_global` | `GL` | `www.minimax.io` |
 
-They do not share keys; configure each separately.
+They do not share keys; configure each separately. The Token Plan is measured as
+a **remaining percentage** per window (a short "interval" cap and a "weekly" cap),
+not an absolute token count — the card headlines the smaller (binding) of the two,
+and the detail page lists both plus the reset time.
 
 ## Hardware
 
@@ -70,23 +73,32 @@ They do not share keys; configure each separately.
 . $IDF_PATH/export.sh
 idf.py set-target esp32s3
 idf.py build
-idf.py -p /dev/tty.usbmodemXXXX flash monitor
+idf.py -p /dev/cu.usbmodemXXXX flash monitor   # macOS: /dev/cu.usbmodem*; Linux: /dev/ttyACM*
 ```
 
 The first build downloads the official `m5stack/m5unified` component (which pulls
 `m5stack/m5gfx`) from the ESP Component Registry.
+
+> The Cardputer's USB-Serial-JTAG port name can change after a flash or reset
+> (e.g. `usbmodem1101` ↔ `usbmodem<serial>`). Run `ls /dev/cu.usbmodem*` to find
+> the current one. If `idf.py flash` reports *"No serial data received"*, hold the
+> **G0/BOOT** button while plugging in (or while tapping reset) to force download
+> mode, then flash.
 
 ## Configure Wi-Fi & credentials
 
 Set Wi-Fi on the device (press **W**) or over USB; add provider credentials over
 USB with the bundled tool. Full walkthrough: **[docs/PROVISIONING.md](docs/PROVISIONING.md)**.
 
+The port is auto-detected when there's a single board attached, so `--port` can
+usually be omitted (handy because the USB-Serial-JTAG name changes across resets):
+
 ```bash
-python tools/quota_config.py --port /dev/tty.usbmodemXXXX set-wifi
-python tools/quota_config.py --port /dev/tty.usbmodemXXXX add-provider minimax_cn
-python tools/quota_config.py --port /dev/tty.usbmodemXXXX add-provider openai \
-    --relay-url https://your-relay.example.com/openai
-python tools/quota_config.py --port /dev/tty.usbmodemXXXX list
+python tools/quota_config.py set-wifi
+python tools/quota_config.py add-provider minimax_cn
+python tools/quota_config.py add-provider openai --relay-url https://your-relay.example.com/openai
+python tools/quota_config.py list
+# pass --port /dev/cu.usbmodemXXXX explicitly if auto-detect fails
 ```
 
 Keys are read without echo, sent to the device only, and never written to disk.
