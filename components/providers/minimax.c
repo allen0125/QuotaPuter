@@ -1,12 +1,12 @@
 // MiniMax CN / Global — Token Plan remaining-quota providers (PRD §11.1).
 //
 // Endpoint (official): GET https://<host>/v1/token_plan/remains with
-// Authorization: Bearer <Subscription Key>. The response *schema* is not
-// published by MiniMax, so the parser below is defensive: it reads the commonly
-// observed shape (base_resp + model_remains[] with total/remain or a remaining
-// usage_percent and an end_time window) and degrades to API_CHANGED when the
-// payload doesn't match, rather than guessing. Adjust field names here once a
-// real Subscription Key response is captured.
+// Authorization: Bearer <Subscription Key>. MiniMax doesn't publish the response
+// schema; the parser below matches a real captured response: base_resp.status_code
+// (0 = ok) plus model_remains[] where each model has
+// current_interval_remaining_percent / current_weekly_remaining_percent and
+// end_time / weekly_end_time (unix ms). It degrades to API_CHANGED if the shape
+// changes rather than guessing.
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
