@@ -104,6 +104,20 @@ M5Stack Cardputer (ESP32-S3) 上的 LLM 额度查看固件，纯 **ESP-IDF** 开
 [Step 6.2] Implement kimi balance provider with real moonshot API
 ```
 
+## 发布 (Releasing)
+
+固件版本的**唯一事实来源**是 `main/main.cpp` 里的 `QUOTAPUTER_VERSION` 宏。发布流程：
+
+1. 改 `main/main.cpp` 的 `QUOTAPUTER_VERSION` 为新版本（如 `0.2.0`），提交。
+2. 打 tag：`git tag v0.2.0 && git push origin v0.2.0`（tag 必须等于宏值，**带 `v` 前缀**）。
+3. `.github/workflows/firmware.yml` 在 tag 推送时先跑 `tools/check_version.sh "$GITHUB_REF_NAME"`：
+   tag 与固件内版本不一致则**直接失败**，不会发布。一致则用 ESP-IDF v5.3.3 容器构建，
+   并发 GitHub Release，附 `quotaputer.bin` / `bootloader.bin` / `partition-table.bin` /
+   合并镜像 `quotaputer-full.bin` / `flasher_args.json`。
+4. 本地可随时 `tools/check_version.sh` 查看当前固件版本、`tools/check_version.sh v0.2.0` 预校验。
+
+非 tag 的 push/PR 只构建做 CI，不发布。
+
 ## 参考
 
 - M5Stack 文档 — https://docs.m5stack.com ｜ M5Unified — https://github.com/m5stack/M5Unified

@@ -1,0 +1,79 @@
+name: firmware
+
+# Build on every push to main and on PRs (CI), and additionally publish a
+# GitHub Release with the firmware binaries when a version tag (v*) is pushed.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: write # needed to create the Release on a tag
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # On a tag push, fail fast unless the tag matches QUOTAPUTER_VERSION in
+      # main/main.cpp (single source of truth). Never release a mismatched tag.
+      - name: Check tag matches firmware version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: ./tools/check_version.sh "${GITHUB_REF_NAME}"
+
+      # Build inside the official ESP-IDF v5.3.3 container (pulls m5unified/m5gfx
+      # from the component registry). Also produce a single merged image.
+      - name: Build firmware
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.3.3
+          target: esp32s3
+          command: idf.py build && (idf.py merge-bin -o build/quotaputer-full.bin || echo "merge-bin unavailable, skipping")
+
+      - name: Collect artifacts
+        run: |
+          set -e
+          mkdir -p dist
+          cp build/quotaputer.bin                     dist/
+          cp build/bootloader/bootloader.bin          dist/
+          cp build/partition_table/partition-table.bin dist/
+          cp build/flasher_args.json                  dist/ || true
+          cp build/quotaputer-full.bin                dist/ || true
+          ls -l dist
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: quotaputer-firmware
+          path: dist/
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            QuotaPuter firmware ${{ github.ref_name }} for M5Stack Cardputer (ESP32-S3).
+
+            ## Flash (single merged image, simplest)
+            ```bash
+            esptool.py --chip esp32s3 -p /dev/cu.usbmodemXXXX write_flash 0x0 quotaputer-full.bin
+            ```
+
+            ## Flash (individual images)
+            ```bash
+            esptool.py --chip esp32s3 -p /dev/cu.usbmodemXXXX \
+              --before default_reset --after hard_reset write_flash \
+              --flash_mode dio --flash_freq 80m --flash_size 8MB \
+              0x0     bootloader.bin \
+              0x8000  partition-table.bin \
+              0x20000 quotaputer.bin
+            ```
+
+            Wi-Fi and provider credentials are provisioned separately over USB with
+            `tools/quota_config.py` — see docs/PROVISIONING.md. Nothing sensitive is
+            baked into these images.
