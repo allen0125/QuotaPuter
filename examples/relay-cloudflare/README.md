@@ -14,7 +14,8 @@ Each `GET /<provider>` returns the standardized record the firmware parses:
 ```json
 { "provider": "anthropic", "metric_type": "usage", "title": "Anthropic",
   "used": 12.34, "limit": null, "unit": "USD", "percentage": null,
-  "reset_at": null, "updated_at": "2026-06-04T12:00:00Z", "status": "ok" }
+  "reset_at": null, "updated_at": "2026-06-04T12:00:00Z", "status": "ok",
+  "aux1": null, "aux1_label": null, "aux2": null, "aux2_label": null }
 ```
 
 - `/anthropic` — month-to-date org **cost in USD** via
@@ -30,16 +31,20 @@ Each `GET /<provider>` returns the standardized record the firmware parses:
 - `/gemini` — **TODO**: Gemini/Cloud usage needs a Cloud Monitoring `timeSeries`
   query (metric `generativelanguage.googleapis.com/...`) with a service-account
   token. Returns `status:"error"` until you fill in `gemini()` in `src/index.js`.
-- `/codex` — your **ChatGPT subscription plan** usage (the 5h + weekly "% used"
-  windows), via the same undocumented endpoint the official Codex CLI polls
-  (`GET chatgpt.com/backend-api/wham/usage`). This is **not** the developer API
-  platform — it's the plan/quota you see in the app. See setup below.
+- `/codex` — your **ChatGPT subscription plan** weekly used percentage, weekly
+  reset time, optional 5-hour window, and available banked reset count. This is
+  **not** the developer API platform. See the compatibility note and setup below.
 
 ## /codex (ChatGPT plan usage) setup
 
-This route reads usage with your `codex login` OAuth tokens (kept server-side,
-auto-refreshed). It is an **undocumented** surface OpenAI's own CLI uses, so it
-may change — treat it as best-effort.
+For desktop/local integrations, prefer the supported `codex app-server` method
+`account/rateLimits/read`; it owns login/refresh and returns rate-limit windows
+plus `rateLimitResetCredits.availableCount`. A Cloudflare Worker cannot spawn
+that local process, so this hosted route uses the corresponding internal
+`/wham/usage` and `/wham/rate-limit-reset-credits` paths. It reads your `codex
+login` OAuth tokens, keeps them server-side, and refreshes them automatically.
+Those HTTPS paths are undocumented and can change, so treat this route as
+best-effort.
 
 ```bash
 # 1) Log in Codex with your ChatGPT account if you haven't:
@@ -52,17 +57,18 @@ python3 -c "import json,os;print(json.load(open(os.path.expanduser('~/.codex/aut
 # 3) Create the KV namespace and paste its id into wrangler.toml (kv_namespaces.id):
 wrangler kv namespace create TOKENS
 
-# 4) Deploy and verify the RAW response shape first:
+# 4) Set DEVICE_TOKEN (strongly recommended), deploy, and verify the raw shape:
+wrangler secret put DEVICE_TOKEN
 wrangler deploy
 curl "https://quotaputer-relay.<sub>.workers.dev/codex?debug=1" -H "Authorization: Bearer <DEVICE_TOKEN>"
 # then without ?debug for the standardized record:
 curl  "https://quotaputer-relay.<sub>.workers.dev/codex"        -H "Authorization: Bearer <DEVICE_TOKEN>"
 ```
 
-Point a device provider at `…/codex` (it reports `percentage` + `reset_at`, so the
-device shows a "% used" bar that counts down to the window reset). The `?debug=1`
-dump lets you confirm the real field names; the parser already tolerates common
-camelCase/snake_case variants.
+Point a device provider at `…/codex`. The card headline and progress bar show
+the weekly used percentage; detail shows its reset countdown, the 5-hour used
+percentage when the backend returns it, and `RESETS: N`. The `?debug=1` dump
+includes account quota metadata, so do not share it publicly.
 
 ## Deploy
 
@@ -101,7 +107,12 @@ python tools/quota_config.py add-provider anthropic \
 ```
 
 The device immediately runs a read-only test query and shows `CONNECTED` or the
-error. Repeat with `add-provider openai --relay-url .../openai`.
+error. Repeat with `add-provider openai --relay-url .../openai`, or add Codex:
+
+```bash
+python tools/quota_config.py add-provider codex \
+  --relay-url https://quotaputer-relay.<your-subdomain>.workers.dev/codex
+```
 
 ## Region / geo-blocking (important for HK & mainland China)
 
@@ -129,8 +140,13 @@ egress, run this relay on a Tokyo-region host instead (Google Cloud Run
 
 - The Anthropic **Admin API key** (`sk-ant-admin...`) only exists in the Worker
   secret store — not in this repo, not on the device.
-- `DEVICE_TOKEN` is an optional shared secret so only your device can read the
-  relay. It is checked against the `Authorization: Bearer` header.
+- `DEVICE_TOKEN` is required for `/codex` and optional for the other routes. It
+  is checked against the `Authorization: Bearer` header.
 - The relay only ever performs read-only usage/cost queries.
+- The Codex refresh token is an account credential. It stays in Worker secrets;
+  rotated tokens stay in the private `TOKENS` KV namespace and never reach the
+  device. `/codex` reports reset credits but never consumes one.
+- The Worker refuses `/codex` when `DEVICE_TOKEN` is not configured, preventing
+  accidental public exposure of your quota state.
 - Consider restricting the Worker further (Cloudflare Access, mTLS, or an
   allow-list) if the URL might leak.

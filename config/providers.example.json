@@ -36,6 +36,12 @@
       "enabled": false,
       "auth_mode": "relay",
       "relay_url": "https://your-relay.example.com/gemini"
+    },
+    {
+      "id": "codex",
+      "enabled": false,
+      "auth_mode": "relay",
+      "relay_url": "https://your-relay.example.com/codex"
     }
   ]
 }

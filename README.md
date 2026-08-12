@@ -18,18 +18,22 @@ balance across several official LLM platforms — built with pure **ESP-IDF**
   separate providers)
 - ✅ Show Kimi (Moonshot) API balance — available / cash / voucher
 - ✅ Show OpenAI / Anthropic / Google-Gemini **org/API usage** via a relay you run
+- ✅ Show Codex **ChatGPT plan** weekly usage, reset time, 5-hour window (when
+  returned), and available reset credits through an opt-in self-hosted relay
 - ✅ Cache the last good result and show it offline, marked `STALE`
 - ✅ Auto-refresh (1 / 5 / 15 / 30 min) and manual refresh
 
 **Cannot:**
 
 - ❌ Call LLMs or generate anything
-- ❌ Read a personal **ChatGPT Plus**, **Claude Pro/Max**, or **Google AI** plan —
-  those have no official public quota API
-- ❌ Use unofficial APIs, web-login cookies, or scraping
+- ❌ Read a personal **Claude Pro/Max** or **Google AI** plan — those have no
+  official public quota API
+- ❌ Offer a supported public OpenAI API for ChatGPT/Codex plan quota. The Codex
+  relay is explicitly best-effort because its hosted path is undocumented.
 - ❌ Store admin keys on the device for OpenAI/Anthropic/Gemini (use relay mode)
 
-QuotaPuter only calls official, publicly documented endpoints.
+QuotaPuter defaults to official, publicly documented endpoints. The opt-in Codex
+plan relay is the sole documented exception and is clearly marked best-effort.
 
 ## Supported providers
 
@@ -41,6 +45,7 @@ QuotaPuter only calls official, publicly documented endpoints.
 | OpenAI | API org usage | tokens / cost | Admin key via **relay** |
 | Anthropic | Console org usage | usage / cost | Admin key via **relay** |
 | Gemini | Google Cloud project | project usage / quota | service account via **relay** |
+| Codex | ChatGPT plan | weekly used %, reset time, reset credits | ChatGPT OAuth via **relay** |
 
 The OpenAI/Anthropic/Gemini screens are labelled `API USAGE - NOT CHATGPT PLAN`,
 `ORG USAGE - NOT CLAUDE PRO/MAX`, and `CLOUD PROJECT - NOT GOOGLE AI PLAN`.
@@ -112,10 +117,12 @@ After writing a key the device runs a read-only test query and reports
 | MiniMax CN / Global, Kimi | Direct is fine (low-privilege user keys) |
 | OpenAI, Anthropic | **Relay strongly recommended** (admin keys) |
 | Gemini / Google Cloud | **Relay required** (service-account credentials) |
+| Codex / ChatGPT plan | **Relay required** (OAuth token stays off-device) |
 
 A relay is a small service you host that holds the high-privilege credentials and
 returns a standardized JSON record; the device stores only the relay URL and a
-read-only token. See [docs/PROVISIONING.md](docs/PROVISIONING.md) for the format.
+read-only token. The included Cloudflare example supports `/codex`, including
+weekly usage and banked reset count. See [docs/PROVISIONING.md](docs/PROVISIONING.md).
 
 ## Controls (PRD §9)
 
@@ -173,7 +180,7 @@ QuotaPuter/
 │   ├── cache/                 # offline result cache
 │   ├── http_client/           # HTTPS GET + cert bundle
 │   ├── wifi_manager/          # STA connect + reconnect
-│   ├── providers/             # minimax / kimi / relay (openai,anthropic,gemini)
+│   ├── providers/             # minimax / kimi / relay (openai,anthropic,gemini,codex)
 │   ├── provisioner/           # USB-Serial-JTAG config protocol
 │   ├── keyboard/              # 74HC138 matrix scan
 │   ├── display/               # pixel UI primitives (M5GFX)

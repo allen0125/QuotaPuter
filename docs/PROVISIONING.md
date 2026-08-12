@@ -56,14 +56,14 @@ python tools/quota_config.py --port /dev/tty.usbmodemXXXX add-provider kimi --ke
 > Use the **Subscription Key** for MiniMax (from Token Plan / 订阅管理), not the
 > pay-as-you-go API key — they are different keys.
 
-### Relay-mode providers (OpenAI, Anthropic, Gemini)
+### Relay-mode providers (OpenAI, Anthropic, Gemini, Codex)
 
 High-privilege org/admin credentials should **never** be stored on the device.
 Run your own relay that holds those credentials, talks to the official org/usage
 APIs, and returns the standardized record below. The device stores only the
 relay URL and a read-only device token.
 
-> A ready-to-deploy reference relay (Cloudflare Worker) for Anthropic/OpenAI is in
+> A ready-to-deploy reference relay (Cloudflare Worker) for Anthropic/OpenAI/Codex is in
 > [`examples/relay-cloudflare/`](../examples/relay-cloudflare/) — it gives you a
 > trusted-HTTPS URL and keeps the admin keys as Worker secrets.
 
@@ -90,8 +90,28 @@ Your relay must answer each `GET <relay_url>` with:
 }
 ```
 
+Optional `aux1`/`aux1_label` and `aux2`/`aux2_label` pairs add two numeric rows
+to the detail screen. The included `/codex` route uses them for the 5-hour used
+percentage and available reset-credit count; the main `percentage` and
+`reset_at` fields represent the weekly window.
+
+To provision Codex after deploying the reference relay:
+
+```bash
+python tools/quota_config.py --port /dev/tty.usbmodemXXXX add-provider codex \
+    --relay-url https://your-relay.example.com/codex
+```
+
+Codex is a deliberate exception to the official-API-only default. The supported
+desktop-facing source is `codex app-server` (`account/rateLimits/read`), but a
+hosted Worker cannot start that local process. The example Worker therefore
+uses the internal ChatGPT usage and reset-credit paths with your Codex OAuth
+session. They can change without notice; keep `DEVICE_TOKEN` enabled and never
+put the OAuth token on the Cardputer.
+
 `status` may be `ok`, `auth`, `no_permission`, `stale`, `offline`, or `error`.
-`metric_type` is `usage` (OpenAI/Anthropic) or `project` (Gemini).
+`metric_type` is `usage` (OpenAI/Anthropic), `project` (Gemini), or
+`subscription` (Codex).
 
 ## 4. Inspect, remove, reset
 

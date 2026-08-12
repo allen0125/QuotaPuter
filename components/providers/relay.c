@@ -1,9 +1,9 @@
-// Relay-mode providers: OpenAI / Anthropic / Gemini (PRD §6.2, §11.2-11.4).
+// Relay-mode providers: OpenAI / Anthropic / Gemini / Codex.
 //
 // High-privilege credentials never touch the device. The user runs a small relay
 // that talks to the official org/usage APIs and returns a standardized record:
 //   {provider, metric_type, title, used, limit, unit, percentage, reset_at,
-//    updated_at, status}
+//    updated_at, status, aux1, aux1_label, aux2, aux2_label}
 // The Cardputer stores only the relay URL and a read-only device token, GETs the
 // relay, and renders the result with a disclaimer that this is org/API usage —
 // not a personal ChatGPT/Claude/Gemini subscription.
@@ -65,13 +65,27 @@ static void parse_relay(const char *body, quota_result_t *r) {
     if (r->has_limit && !isnan(r->used)) {
         r->remaining = (float)(r->limit - r->used);
     }
+
+    // Optional detail rows. Codex uses these for the 5-hour window and the
+    // number of banked rate-limit resets; other relay providers may omit them.
+    if (provider_json_get_number(root, "aux1", &v)) r->aux1 = (float)v;
+    if (provider_json_get_number(root, "aux2", &v)) r->aux2 = (float)v;
+    const char *aux_label = provider_json_get_string(root, "aux1_label");
+    if (aux_label != NULL) strncpy(r->aux1_label, aux_label, sizeof(r->aux1_label) - 1);
+    aux_label = provider_json_get_string(root, "aux2_label");
+    if (aux_label != NULL) strncpy(r->aux2_label, aux_label, sizeof(r->aux2_label) - 1);
     const char *reset = provider_json_get_string(root, "reset_at");
     if (reset != NULL) {
         int64_t t = provider_iso8601_to_unix(reset);
         if (t > 0) r->reset_at = t;
+    } else if (provider_json_get_number(root, "reset_at", &v) && v > 0) {
+        r->reset_at = (int64_t)(v > 1.0e12 ? v / 1000.0 : v);
     }
     const char *updated = provider_json_get_string(root, "updated_at");
     int64_t ut = updated != NULL ? provider_iso8601_to_unix(updated) : 0;
+    if (ut <= 0 && provider_json_get_number(root, "updated_at", &v) && v > 0) {
+        ut = (int64_t)(v > 1.0e12 ? v / 1000.0 : v);
+    }
     r->updated_at = ut > 0 ? ut : provider_now_unix();
 
     r->status = map_relay_status(provider_json_get_string(root, "status"));
@@ -157,8 +171,8 @@ const quota_provider_t codex_provider = {
     .id = "codex",
     .display_name = "Codex",
     .region = NULL,
-    .metric_type = QUOTA_METRIC_USAGE,
-    .disclaimer = "CHATGPT PLAN USAGE",
+    .metric_type = QUOTA_METRIC_SUBSCRIPTION,
+    .disclaimer = "CHATGPT PLAN - UNOFFICIAL RELAY",
     .fetch_usage = codex_fetch,
     .validate_config = codex_validate,
 };

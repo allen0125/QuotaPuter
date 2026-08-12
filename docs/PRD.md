@@ -18,8 +18,9 @@
 ## 3. 非目标
 
 * 不支持 OpenRouter、ZenMux、API 中转站、第三方代理或聚合平台。
-* 不通过抓包、网页登录 Cookie、模拟浏览器、逆向私有接口查询额度。
-* 不保证读取 ChatGPT Plus、Claude Pro/Max、Google AI Pro 等个人聊天订阅剩余额度，除非供应商提供官方公开接口。
+* 不通过抓包、网页登录 Cookie 或模拟浏览器查询额度。
+* 除用户显式启用的 Codex 自建 Relay 外，不接入私有接口；Codex Relay 必须标记为 best-effort，且 OAuth 凭证不得进入设备。
+* 不保证读取 Claude Pro/Max、Google AI Pro 等个人聊天订阅剩余额度，除非供应商提供官方公开接口。
 * 不在仓库、固件镜像或示例配置中预置任何真实凭证。
 * 不提供模型调用、聊天或代码生成能力。
 
@@ -33,6 +34,7 @@
 | Anthropic     | Console Organization / Claude Code Org | 用量、费用或 Claude Code 使用报告 | Admin API Key          | 支持，不等同于个人 Claude 订阅       |
 | Google Gemini | Google Cloud / Gemini API 项目           | 项目级用量或配额监控结果            | 推荐通过用户自建 Relay         | 支持，不等同于个人 Gemini 订阅       |
 | Kimi          | API 开放平台                               | 可用余额、现金余额、代金券余额         | API Key                | 支持，不等同于 Kimi Code Plan 额度 |
+| Codex         | ChatGPT 订阅计划                            | 周用量、重置时间、可用重置次数          | OAuth 经用户自建 Relay    | 支持（best-effort，非公开 HTTPS 路径） |
 
 ### 4.1 MiniMax 区域区分
 
@@ -561,7 +563,7 @@ README 必须说明：
 * 固件可在 Cardputer 上启动并正常操作。
 * 仅使用 ESP-IDF 构建成功。
 * 可配置 Wi-Fi 并自动联网。
-* 可添加、删除至少 6 个 Provider 配置：
+* 可添加、删除至少 7 个 Provider 配置：
 
   * MiniMax CN
   * MiniMax Global
@@ -569,6 +571,7 @@ README 必须说明：
   * Anthropic
   * Gemini
   * Kimi
+  * Codex
 * MiniMax 中国版与国际版可分别查询和展示状态。
 * 首页可展示所有已启用 Provider 的最新数据。
 * 详情页可查看单个平台信息并手动刷新。
@@ -582,7 +585,7 @@ README 必须说明：
 * 日志不输出完整敏感信息。
 * 用户可通过设备或工具清除全部凭证。
 * 高权限 Provider 明确推荐或强制使用 Relay 模式。
-* 不使用非官方接口或网页登录态抓取。
+* Codex 以外不使用非官方接口；Codex OAuth 仅保存在用户自建 Relay，设备只持有只读 relay token。
 
 ### 视觉验收
 
@@ -599,4 +602,3 @@ README 必须说明：
 * 像素化 Logo 不代表品牌方赞助、认证或合作。
 * 用户自行负责其凭证权限、额度消耗与设备安全。
 * 项目不保存、不代理、不上传用户密钥，除非用户自行配置 Relay 服务。
-

@@ -9,18 +9,23 @@
 //   GET /anthropic   -> Anthropic org cost (month-to-date, USD)   [implemented]
 //   GET /openai      -> OpenAI org cost (month-to-date, USD)       [implemented*]
 //   GET /gemini      -> Google Cloud / Gemini usage               [TODO, see README]
+//   GET /codex       -> ChatGPT/Codex weekly usage + reset count   [best-effort]
 //
 // Secrets (wrangler secret put ...):
 //   ANTHROPIC_ADMIN_KEY   sk-ant-admin...   (required for /anthropic)
 //   OPENAI_ADMIN_KEY      sk-admin...       (required for /openai)
-//   DEVICE_TOKEN          optional; if set, requests must send
-//                         `Authorization: Bearer <DEVICE_TOKEN>`
+//   CODEX_REFRESH_TOKEN   Codex OAuth token (required for /codex)
+//   DEVICE_TOKEN          required for /codex, optional for other routes; send
+//                         it as `Authorization: Bearer <DEVICE_TOKEN>`
 
 export default {
   async fetch(request, env) {
     const path = new URL(request.url).pathname.replace(/\/+$/, "");
     const provider = path.split("/").filter(Boolean).pop() || "";
 
+    if (provider === "codex" && !env.DEVICE_TOKEN) {
+      return json({ provider, status: "error", error: "DEVICE_TOKEN required for /codex" }, 503);
+    }
     // Optional shared-secret gate (the device's relay_token).
     if (env.DEVICE_TOKEN) {
       const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
@@ -198,9 +203,14 @@ async function gemini(env) {
 }
 
 // ---- Codex / ChatGPT plan usage ----------------------------------------------
-// Reads your ChatGPT subscription plan usage (the 5h + weekly "% used" windows)
-// via the same undocumented endpoint the official Codex CLI polls:
-//   GET https://chatgpt.com/backend-api/wham/usage   (Bearer ChatGPT OAuth token)
+// Reads your ChatGPT subscription plan usage (5h/weekly windows) and banked
+// reset-credit count via the same backend client paths used by Codex:
+//   GET https://chatgpt.com/backend-api/wham/usage
+//   GET https://chatgpt.com/backend-api/wham/rate-limit-reset-credits
+// The supported desktop integration is `codex app-server`'s
+// account/rateLimits/read method. A Worker cannot spawn that local process, so
+// this hosted relay uses the equivalent internal HTTPS paths. Keep it isolated
+// behind DEVICE_TOKEN because those paths are not a public OpenAI API contract.
 // Tokens come from `codex login`. Set CODEX_REFRESH_TOKEN (from ~/.codex/auth.json
 // -> tokens.refresh_token) as a secret; the Worker refreshes the short-lived
 // access token via OAuth and persists the rotated tokens in the TOKENS KV
@@ -209,6 +219,8 @@ async function gemini(env) {
 const CODEX_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const CODEX_TOKEN_URL = "https://auth.openai.com/oauth/token";
 const CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
+const CODEX_RESET_CREDITS_URL =
+  "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits";
 
 function b64urlToJson(seg) {
   const b64 = seg.replace(/-/g, "+").replace(/_/g, "/");
@@ -271,19 +283,95 @@ async function codexAccessToken(env) {
   return next;
 }
 
-// Pull a "used percent" and "reset" out of a window object, tolerating both
-// camelCase and snake_case names since the endpoint is undocumented.
-function windowUsed(w) {
-  if (!w || typeof w !== "object") return null;
-  const v = w.usedPercent ?? w.used_percent ?? w.percent_used ?? w.percent ?? null;
-  return typeof v === "number" ? v : null;
+function finiteNumber(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
 }
-function windowReset(w) {
+
+// Normalize both the private wham JSON (snake_case, *_window) and Codex
+// app-server JSON (camelCase, primary/secondary). Window duration, rather than
+// position, is authoritative: current plans can return the weekly bucket as
+// `primary` with no secondary bucket.
+function normalizeWindow(w) {
   if (!w || typeof w !== "object") return null;
-  const at = w.resetsAt ?? w.resets_at ?? w.reset_at ?? null;
-  if (typeof at === "number") return at > 1e12 ? Math.floor(at / 1000) : at; // ms or s
-  const inS = w.resetsInSeconds ?? w.resets_in_seconds ?? w.resets_in ?? null;
-  if (typeof inS === "number") return Math.floor(Date.now() / 1000) + inS;
+  const used = finiteNumber(
+    w.usedPercent ?? w.used_percent ?? w.percent_used ?? w.percent,
+  );
+  let mins = finiteNumber(
+    w.windowDurationMins ?? w.window_duration_mins ?? w.window_minutes,
+  );
+  if (mins == null) {
+    const seconds = finiteNumber(
+      w.limitWindowSeconds ?? w.limit_window_seconds ?? w.window_seconds,
+    );
+    if (seconds != null) mins = seconds / 60;
+  }
+
+  let reset = w.resetsAt ?? w.resets_at ?? w.reset_at ?? null;
+  if (typeof reset === "string" && finiteNumber(reset) == null) {
+    const parsed = Date.parse(reset);
+    reset = Number.isFinite(parsed) ? Math.floor(parsed / 1000) : null;
+  } else {
+    reset = finiteNumber(reset);
+  }
+  if (reset != null && reset > 1e12) reset = Math.floor(reset / 1000);
+  if (reset == null) {
+    const inS = finiteNumber(
+      w.resetAfterSeconds ?? w.reset_after_seconds ??
+        w.resetsInSeconds ?? w.resets_in_seconds ?? w.resets_in,
+    );
+    if (inS != null) reset = Math.floor(Date.now() / 1000) + inS;
+  }
+  if (used == null && mins == null && reset == null) return null;
+  return { used, minutes: mins, reset };
+}
+
+function classifyCodexWindows(body) {
+  const root = body?.result || body || {};
+  const byId = root.rateLimitsByLimitId || root.rate_limits_by_limit_id || {};
+  const rl = byId.codex || root.rateLimits || root.rate_limits || root.rate_limit || root;
+  const primary = normalizeWindow(rl.primary_window || rl.primaryWindow || rl.primary);
+  const secondary = normalizeWindow(
+    rl.secondary_window || rl.secondaryWindow || rl.secondary,
+  );
+
+  let fiveHour = null;
+  let weekly = null;
+  for (const w of [primary, secondary]) {
+    if (!w || w.minutes == null) continue;
+    if (Math.abs(w.minutes - 300) < 0.01) fiveHour = w;
+    if (Math.abs(w.minutes - 10080) < 0.01) weekly = w;
+  }
+  // Backward-compatible positional fallback for older payloads with no duration.
+  if (!fiveHour && primary && primary !== weekly && secondary) fiveHour = primary;
+  if (!weekly && secondary) weekly = secondary;
+  // Some payload variants expose one unlabeled window as `primary`. Keep it as
+  // the current headline without claiming it is weekly; duration-aware current
+  // plans (including weekly-only plans) were classified above.
+  return { fiveHour, weekly, current: primary || secondary };
+}
+
+function resetCreditCount(usageBody, creditsBody) {
+  const candidates = [];
+  for (const body of [creditsBody, usageBody]) {
+    const root = body?.result || body;
+    if (!root || typeof root !== "object") continue;
+    candidates.push(
+      root.rateLimitResetCredits,
+      root.rate_limit_reset_credits,
+      root.resetCredits,
+      root,
+    );
+  }
+  for (const c of candidates) {
+    if (!c || typeof c !== "object") continue;
+    const value = finiteNumber(c.availableCount ?? c.available_count);
+    if (value != null) return Math.max(0, Math.floor(value));
+  }
   return null;
 }
 
@@ -293,46 +381,59 @@ async function codexUsage(env, debug) {
     authorization: `Bearer ${t.access}`,
     "user-agent": "codex_cli_rs/0.0.0 (QuotaPuter relay)",
     originator: "codex_cli_rs",
+    "openai-beta": "codex-1",
     accept: "application/json",
   };
   if (t.accountId) headers["chatgpt-account-id"] = t.accountId;
 
-  const r = await fetch(CODEX_USAGE_URL, { headers });
-  if (!r.ok) return await upstreamError("openai", r);
-  const body = await r.json();
-  if (debug) return json(body); // inspect the raw shape, then tighten below
-
-  const rl = body.rate_limit || body.rateLimits || body.rate_limits || body;
-  const primary = rl.primary || rl.primary_window || null;
-  const secondary = rl.secondary || rl.secondary_window || null;
-  const pu = windowUsed(primary);
-  const su = windowUsed(secondary);
-
-  let used = null;
-  let reset = null;
-  if (pu != null && su != null) {
-    if (su >= pu) { used = su; reset = windowReset(secondary); }
-    else { used = pu; reset = windowReset(primary); }
-  } else if (su != null) { used = su; reset = windowReset(secondary); }
-  else if (pu != null) { used = pu; reset = windowReset(primary); }
-
-  if (used == null) {
+  const [usageResponse, creditsResponse] = await Promise.all([
+    fetch(CODEX_USAGE_URL, { headers }),
+    fetch(CODEX_RESET_CREDITS_URL, { headers }),
+  ]);
+  if (!usageResponse.ok) return await upstreamError("codex", usageResponse);
+  const usageBody = await usageResponse.json();
+  let creditsBody = null;
+  if (creditsResponse.ok) {
+    creditsBody = await creditsResponse.json();
+  }
+  if (debug) {
     return json({
-      provider: "openai", metric_type: "usage", title: "Codex Plan",
+      usage: usageBody,
+      reset_credits: creditsBody,
+      reset_credits_http_status: creditsResponse.status,
+    });
+  }
+
+  const { fiveHour, weekly, current } = classifyCodexWindows(usageBody);
+  const headline = weekly || fiveHour || current;
+  if (!headline || headline.used == null) {
+    return json({
+      provider: "codex", metric_type: "subscription", title: "Codex Weekly",
       used: null, limit: null, unit: "%", percentage: null, reset_at: null,
       updated_at: new Date().toISOString(),
       status: "error", error: "could not parse usage windows — try ?debug=1",
     });
   }
+  const used = Math.max(0, Math.min(100, headline.used));
+  const resetCount = resetCreditCount(usageBody, creditsBody);
   return json({
-    provider: "openai",
-    metric_type: "usage",
-    title: "Codex Plan",
+    provider: "codex",
+    metric_type: "subscription",
+    title: weekly ? "Codex Weekly" : "Codex Current",
     used: Math.round(used * 100) / 100,
-    limit: 100,
+    // Keep `has_limit` false in the compact firmware data model: `percentage`
+    // already drives the bar, while the freed detail row fits 5h, resets, and
+    // the weekly reset countdown on the 135px display.
+    limit: null,
     unit: "%",
     percentage: Math.round(used * 100) / 100,
-    reset_at: reset ? new Date(reset * 1000).toISOString() : null,
+    reset_at: headline.reset ? new Date(headline.reset * 1000).toISOString() : null,
+    aux1: fiveHour && fiveHour !== headline && fiveHour.used != null
+      ? Math.max(0, Math.min(100, fiveHour.used))
+      : null,
+    aux1_label: fiveHour && fiveHour !== headline ? "5H USED%" : null,
+    aux2: resetCount,
+    aux2_label: resetCount != null ? "RESETS" : null,
     updated_at: new Date().toISOString(),
     status: "ok",
   });

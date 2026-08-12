@@ -29,7 +29,7 @@ M5Stack Cardputer (ESP32-S3) 上的 LLM 额度查看固件，纯 **ESP-IDF** 开
 3. **网络**：HTTPS 仅用 `esp_http_client` + `esp_crt_bundle`（Mozilla 根证书校验，禁止关闭 TLS）；超时 10s；失败重试 ≤1；并发 ≤2 Provider。
 4. **加密 NVS**：应用层使用标准 NVS API；生产部署通过 **Flash Encryption** 透明加密整个 flash（含 NVS）。当 `CONFIG_NVS_ENCRYPTION` 开启时走 `nvs_flash_secure_init`，否则标准 init。细节写入 `docs/SECURITY.md`。
 5. **配置写入**：经 **USB-Serial-JTAG** 控制台的行式 JSON 协议（`provisioner` 组件 ↔ `tools/quota_config.py`）。设备进入 `CONFIG MODE` 后按行收发命令。
-6. **Provider 接口**：严格按 PRD §10.2 的 `quota_provider_t` / `quota_result_t`。注册表 `provider_registry` 持有全部 6 个 Provider 的静态实例，按 `secret_store` 中的 enabled 标记参与刷新。
+6. **Provider 接口**：严格按 PRD §10.2 的 `quota_provider_t` / `quota_result_t`。注册表 `provider_registry` 持有全部 7 个 Provider 的静态实例，按 `secret_store` 中的 enabled 标记参与刷新。
 
 ## 已核实 API (Verified 2026-06-04，详见各 Provider 源码注释)
 
@@ -39,6 +39,7 @@ M5Stack Cardputer (ESP32-S3) 上的 LLM 额度查看固件，纯 **ESP-IDF** 开
 | `minimax_global` | `GET https://www.minimax.io/v1/token_plan/remains` | 同上 | 同上（`.io` 镜像）。 |
 | `kimi` | `GET https://api.moonshot.cn/v1/users/me/balance` | `Authorization: Bearer <API Key>` | 官方完整：`{code, scode, status, data:{available_balance, cash_balance, voucher_balance}}`（单位 ¥）。 |
 | `openai` / `anthropic` / `gemini` | `GET <relay_url>`（Relay 模式） | `Authorization: Bearer <device token>` | PRD §6.2 标准化 JSON：`{provider, metric_type, title, used, limit, unit, percentage, reset_at, updated_at, status}`。 |
+| `codex` | `GET <relay_url>/codex`（Relay 模式） | 设备仅持有 relay token；OAuth 留在 Relay | 周用量与 reset-credit count。官方本机入口为 Codex app-server `account/rateLimits/read`；Cloudflare 示例因无法启动本机进程，显式采用 best-effort 的内部 ChatGPT HTTPS 路径。 |
 
 > MiniMax 与 Kimi 支持设备直连；OpenAI/Anthropic/Gemini 默认/强制 Relay（PRD §6.3）。详情页须打印对应免责角标（PRD §11）。
 
@@ -68,7 +69,7 @@ M5Stack Cardputer (ESP32-S3) 上的 LLM 额度查看固件，纯 **ESP-IDF** 开
 **Phase 6 — providers**（依赖 4/5/2/3 + provider_core）
 - 6.1 `providers/minimax_common.{h,c}` + `minimax_cn` + `minimax_global`：token_plan 防御式解析，填 percentage/remaining/reset_at。
 - 6.2 `providers/kimi`：balance 解析，available/cash/voucher。
-- 6.3 `providers/relay_common` + `openai` + `anthropic` + `gemini`：解析 PRD §6.2 标准化 JSON；metric_type 与免责角标。
+- 6.3 `providers/relay_common` + `openai` + `anthropic` + `gemini` + `codex`：解析 PRD §6.2 标准化 JSON；metric_type、可选 aux 指标与免责角标。
 
 **Phase 7 — provisioner + PC 工具**（依赖 secret_store + 各 provider validate）
 - 7.1 `provisioner`：USB-JTAG 行式 JSON 协议，命令 `hello/list/add-provider/remove-provider/set-wifi/factory-reset`；写入后即发只读测试查询，返回 `CONNECTED`/错误。
@@ -78,7 +79,7 @@ M5Stack Cardputer (ESP32-S3) 上的 LLM 额度查看固件，纯 **ESP-IDF** 开
 - 8.1 `keyboard`：把 `M5Cardputer.Keyboard.keysState()` 抽象为事件（LEFT/RIGHT/UP/DOWN/ENTER/BACK/REFRESH(R)/SETTINGS(S)/WIFI(W)/字符输入/Fn+Del），含长按 500ms 判定。
 
 **Phase 9 — display UI 基元 + assets**（C++ 包装 M5GFX）
-- 9.1 `assets`：6 个 Provider 的 16×16/24×24 像素 Logo（RGB565 数组，含 CN/GL 角标）+ 像素配色表。生成脚本不入密钥。
+- 9.1 `assets`：7 个 Provider 的 16×16/24×24 像素 Logo（RGB565 数组，含 CN/GL 角标）+ 像素配色表。生成脚本不入密钥。
 - 9.2 `display`：主题色（PRD §8.4 状态色）、进度条、状态角标（OK/ERR/STALE/SETUP）、卡片、标题栏、Wi-Fi 信号、像素字体封装。
 
 **Phase 10 — 屏幕与应用状态机**（顶层，依赖全部）

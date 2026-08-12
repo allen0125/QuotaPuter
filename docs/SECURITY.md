@@ -1,8 +1,11 @@
 # Security Model
 
-QuotaPuter is a read-only quota viewer. It only calls official, publicly
-documented provider endpoints and never performs web-login scraping, cookie
-capture, or reverse-engineered API access.
+QuotaPuter is a read-only quota viewer. Direct providers and organization/API
+usage routes call documented provider endpoints. The opt-in Codex plan route is
+the sole exception: its self-hosted relay reads internal ChatGPT usage and
+reset-credit endpoints with a Codex OAuth session because no public plan-quota
+API exists. It never captures browser cookies or sends that OAuth token to the
+device.
 
 ## Where credentials live
 
@@ -49,10 +52,15 @@ The firmware uses standard NVS APIs. For confidentiality at rest in production:
 | Mode | Use for | Notes |
 | --- | --- | --- |
 | Direct | MiniMax CN/Global, Kimi | Low-privilege user keys stored on device. |
-| Relay (recommended/required) | OpenAI, Anthropic, Gemini | High-privilege org/admin credentials stay on **your** relay server; the device holds only a relay URL and a read-only device token. |
+| Relay (recommended/required) | OpenAI, Anthropic, Gemini, Codex | High-privilege org/admin/OAuth credentials stay on **your** relay server; the device holds only a relay URL and a read-only device token. |
 
-Do **not** store OpenAI/Anthropic Admin keys or Google Cloud service-account
-credentials directly on the device — use relay mode.
+Do **not** store OpenAI/Anthropic Admin keys, Google Cloud service-account
+credentials, or Codex OAuth tokens directly on the device — use relay mode.
+
+For `/codex`, configure `DEVICE_TOKEN`, restrict access to the Worker, and treat
+both the original and rotated refresh tokens as account credentials. The Worker
+keeps rotated tokens in its private `TOKENS` KV namespace. The route is
+read-only: it fetches the available reset count but does not consume a reset.
 
 ## Erasing credentials
 

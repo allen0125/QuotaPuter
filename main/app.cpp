@@ -73,7 +73,10 @@ void fmt_primary(const refresh::Entry &e, char *buf, size_t n) {
         snprintf(buf, n, "%s", e.refreshing ? "SYNC..." : quota_status_message(e.last_status));
         return;
     }
-    if (is_subscription(e)) {
+    if (strcmp(e.prov->id, "codex") == 0 && !std::isnan(r.percentage)) {
+        const char *scope = strstr(r.title, "Weekly") != nullptr ? " WEEK" : "";
+        snprintf(buf, n, "%.0f%%%s USED", r.percentage, scope);
+    } else if (is_subscription(e)) {
         if (!std::isnan(r.percentage)) {
             snprintf(buf, n, "%.0f%% LEFT", 100.0f - r.percentage);
         } else {
@@ -93,6 +96,17 @@ void fmt_primary(const refresh::Entry &e, char *buf, size_t n) {
         } else {
             snprintf(buf, n, "OK");
         }
+    }
+}
+
+void fmt_aux(const char *label, float value, char *buf, size_t n) {
+    size_t len = strlen(label);
+    if (len > 0 && label[len - 1] == '%') {
+        snprintf(buf, n, "%.*s: %.0f%%", (int)(len - 1), label, value);
+    } else if (strcmp(label, "RESETS") == 0) {
+        snprintf(buf, n, "%s: %.0f", label, value);
+    } else {
+        snprintf(buf, n, "%s: %.2f", label, value);
     }
 }
 
@@ -189,15 +203,15 @@ void render_detail() {
     ui::status_badge(190, 20, disp_status(e));
 
     uint16_t col = entry_color(e);
-    int y = 54;
+    int y = 50;
     char buf[48];
     fmt_primary(e, buf, sizeof(buf));
     ui::text(8, y, buf, col, ui::BLACK, 2);
-    y += 24;
+    y += 20;
 
     if ((is_subscription(e) || e.result.has_limit) && !std::isnan(e.result.percentage)) {
         ui::progress_bar(8, y, 180, 10, e.result.percentage, col);
-        y += 14;
+        y += 12;
         if (e.result.has_limit && !std::isnan(e.result.used)) {
             snprintf(buf, sizeof(buf), "%.0f / %.0f %s", e.result.used, e.result.limit,
                      e.result.unit);
@@ -207,12 +221,12 @@ void render_detail() {
     }
     // Secondary metrics: Kimi cash/voucher, MiniMax interval/weekly remaining %.
     if (!std::isnan(e.result.aux1) && e.result.aux1_label[0] != '\0') {
-        snprintf(buf, sizeof(buf), "%s: %.2f", e.result.aux1_label, e.result.aux1);
+        fmt_aux(e.result.aux1_label, e.result.aux1, buf, sizeof(buf));
         ui::text(8, y, buf, ui::WHITE, ui::BLACK, 1);
         y += 12;
     }
     if (!std::isnan(e.result.aux2) && e.result.aux2_label[0] != '\0') {
-        snprintf(buf, sizeof(buf), "%s: %.2f", e.result.aux2_label, e.result.aux2);
+        fmt_aux(e.result.aux2_label, e.result.aux2, buf, sizeof(buf));
         ui::text(8, y, buf, ui::WHITE, ui::BLACK, 1);
         y += 12;
     }
@@ -237,8 +251,8 @@ void render_detail() {
 
     char ago[24];
     fmt_ago(e.result.updated_at, ago, sizeof(ago));
-    ui::text(8, 118, ago, ui::DIM, ui::BLACK, 1);
-    ui::text(132, 118, "R refr  BKSP back", ui::DIM, ui::BLACK, 1);
+    ui::text(8, 124, ago, ui::DIM, ui::BLACK, 1);
+    ui::text(132, 124, "R refr  BKSP back", ui::DIM, ui::BLACK, 1);
 }
 
 void render_settings() {
